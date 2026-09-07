@@ -16,18 +16,13 @@ RaidManagerGame
   └─ currentScene: Scene
        ├─ IntroScene
        ├─ MainMenuScene
-       └─ GameScene (현재 프로토타입)
-
-향후 Scene 흐름:
-
-```text
-MainMenuScene
-  → RaidSetupScene
-  → DungeonSelectScene
-  → BattleScene
-  → BattleResultScene
+       ├─ RaidSetupScene
+       ├─ DungeonSelectScene
+       ├─ GameScene (자동 전투)
+       └─ BattleResultScene
 ```
-```
+
+`BattleSimulator`는 libGDX API에 의존하지 않는 고정 간격 전투 로직이며, 같은 편성과 던전에서 재현 가능한 `BattleResult`를 만든다.
 
 ## Scene 규칙
 
@@ -46,7 +41,7 @@ MainMenuScene
 
 - 게임 규칙을 Scene에서 분리해 순수 Kotlin 도메인 모델과 서비스로 이동한다.
 - `BattleSimulator`는 전투 계산을 담당하고 `BattleLog`를 결과로 반환한다.
-- `BattleScene`은 시뮬레이터를 실행·표시하며 전투 규칙을 직접 소유하지 않는다.
+- `GameScene`은 시뮬레이터를 실행·표시하며 전투 규칙을 직접 소유하지 않는다.
 - `GameState`는 플레이어 진행, 보유 캐릭터, 공격대 편성, 보상을 관리한다.
 - 캐릭터·스킬·아이템·던전의 수치는 데이터 정의로 분리한다.
 - 저장 가능한 게임 상태와 UI 상태를 분리한다.

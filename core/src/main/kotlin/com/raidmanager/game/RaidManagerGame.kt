@@ -6,9 +6,16 @@ import com.badlogic.gdx.InputProcessor
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.utils.ScreenUtils
+import com.raidmanager.game.model.BattleResult
+import com.raidmanager.game.model.DungeonDefinition
+import com.raidmanager.game.model.PrototypeContent
+import com.raidmanager.game.model.RaidFormation
+import com.raidmanager.game.scene.BattleResultScene
+import com.raidmanager.game.scene.DungeonSelectScene
 import com.raidmanager.game.scene.GameScene
 import com.raidmanager.game.scene.IntroScene
 import com.raidmanager.game.scene.MainMenuScene
+import com.raidmanager.game.scene.RaidSetupScene
 import com.raidmanager.game.scene.Scene
 
 /** Shared game code used by both Android and macOS launchers. */
@@ -44,10 +51,54 @@ class RaidManagerGame : ApplicationAdapter() {
     }
 
     private fun openGame() {
+        openRaidSetup(null)
+    }
+
+    private fun openRaidSetup(formation: RaidFormation?) {
+        changeScene(
+            RaidSetupScene(
+                assets = assets,
+                roster = PrototypeContent.characters,
+                initialFormation = formation,
+                onContinue = ::openDungeonSelect,
+                onBack = ::openMainMenu,
+            ),
+        )
+    }
+
+    private fun openDungeonSelect(formation: RaidFormation) {
+        changeScene(
+            DungeonSelectScene(
+                assets = assets,
+                formation = formation,
+                dungeons = PrototypeContent.dungeons,
+                onStart = ::openBattle,
+                onBack = ::openRaidSetup,
+            ),
+        )
+    }
+
+    private fun openBattle(formation: RaidFormation, dungeon: DungeonDefinition) {
         changeScene(
             GameScene(
                 assets = assets,
-                onExit = ::openMainMenu,
+                formation = formation,
+                dungeon = dungeon,
+                onFinished = ::openBattleResult,
+                onExit = ::openDungeonSelect,
+            ),
+        )
+    }
+
+    private fun openBattleResult(formation: RaidFormation, dungeon: DungeonDefinition, result: BattleResult) {
+        changeScene(
+            BattleResultScene(
+                assets = assets,
+                formation = formation,
+                dungeon = dungeon,
+                result = result,
+                onRetry = ::openBattle,
+                onChangeRaid = ::openRaidSetup,
             ),
         )
     }
