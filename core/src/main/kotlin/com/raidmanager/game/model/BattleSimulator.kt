@@ -7,6 +7,20 @@ class BattleSimulator(
     private val formation: RaidFormation,
     val dungeon: DungeonDefinition,
 ) {
+    enum class CueType { HIT, HEAL, SHIELD, INTERRUPT, SUNDER, WAVE }
+
+    data class CombatCue(
+        val type: CueType,
+        val source: String,
+        val target: String,
+        val amount: Float = 0f,
+        val skillType: SkillType? = null,
+    )
+
+    private val cues = mutableListOf<CombatCue>()
+
+    fun drainCombatCues(): List<CombatCue> = cues.toList().also { cues.clear() }
+
     data class MemberSnapshot(
         val character: CharacterDefinition,
         val hp: Float,
@@ -135,7 +149,10 @@ class BattleSimulator(
         member.skillUses += 1
         when (member.character.skillType) {
             SkillType.GUARD -> {
-                members.filter { it.hp > 0f }.forEach { it.shield = min(MAX_SHIELD, it.shield + 13f) }
+                members.filter { it.hp > 0f }.forEach {
+                    it.shield = min(MAX_SHIELD, it.shield + 13f)
+                    cues += CombatCue(CueType.SHIELD, member.character.id, it.character.id, skillType = SkillType.GUARD)
+                }
                 log("${member.character.name} used ${member.character.skillName}: party shielded")
             }
 
@@ -144,29 +161,33 @@ class BattleSimulator(
                 val healed = min(30f, target.character.maxHp - target.hp)
                 target.hp += healed
                 member.healingDone += healed
+                if (healed > 0f) {
+                    cues += CombatCue(CueType.HEAL, member.character.id, target.character.id, healed, SkillType.HEAL)
+                }
                 if (healed > 0f) log("${member.character.name} healed ${target.character.name} for ${healed.toInt()}")
             }
 
             SkillType.STRIKE -> {
-                damageEnemy(member, 32f)
+                damageEnemy(member, 32f, SkillType.STRIKE)
                 log("${member.character.name} used ${member.character.skillName} for 32")
             }
 
             SkillType.CLEAVE -> {
                 val damage = if (dungeon.mechanic == DungeonMechanic.SWARM) 50f else 22f
-                damageEnemy(member, damage)
+                damageEnemy(member, damage, SkillType.CLEAVE)
                 log("${member.character.name} used ${member.character.skillName} for ${damage.toInt()}")
             }
 
             SkillType.INTERRUPT -> {
                 interruptReady = true
-                damageEnemy(member, 10f)
+                damageEnemy(member, 10f, SkillType.INTERRUPT)
                 log("${member.character.name} prepared an interrupt")
             }
 
             SkillType.SUNDER -> {
                 sunderTime = 6f
-                damageEnemy(member, 16f)
+                cues += CombatCue(CueType.SUNDER, member.character.id, "boss", skillType = SkillType.SUNDER)
+                damageEnemy(member, 16f, SkillType.SUNDER)
                 log("${member.character.name} applied healing reduction")
             }
         }
@@ -182,17 +203,20 @@ class BattleSimulator(
     private fun triggerMechanic() {
         if (dungeon.mechanic != DungeonMechanic.REGEN && interruptReady) {
             interruptReady = false
+            cues += CombatCue(CueType.INTERRUPT, "boss", "boss")
             log("${dungeon.enemyName}'s special attack was interrupted")
             return
         }
 
         when (dungeon.mechanic) {
             DungeonMechanic.BURST -> {
+                cues += CombatCue(CueType.WAVE, "boss", "boss")
                 members.filter { it.hp > 0f }.forEach { damageMember(it, 22f) }
                 log("COLOSSAL SLAM hit the entire raid")
             }
 
             DungeonMechanic.SWARM -> {
+                cues += CombatCue(CueType.WAVE, "boss", "boss")
                 members.filter { it.hp > 0f }.forEach { damageMember(it, 11f) }
                 log("A swarm wave hit the entire raid")
             }
@@ -200,15 +224,19 @@ class BattleSimulator(
             DungeonMechanic.REGEN -> {
                 val recovery = if (sunderTime > 0f) 7f else 32f
                 enemyHp = min(dungeon.enemyMaxHp, enemyHp + recovery)
+                cues += CombatCue(CueType.HEAL, "boss", "boss", recovery)
                 log("${dungeon.enemyName} regenerated ${recovery.toInt()} HP")
             }
         }
     }
 
-    private fun damageEnemy(source: MemberState, amount: Float) {
+    private fun damageEnemy(source: MemberState, amount: Float, skillType: SkillType? = null) {
         val applied = min(amount, enemyHp)
         enemyHp -= applied
         source.damageDealt += applied
+        if (applied > 0f) {
+            cues += CombatCue(CueType.HIT, source.character.id, "boss", applied, skillType)
+        }
     }
 
     private fun damageMember(target: MemberState, amount: Float) {
@@ -217,6 +245,7 @@ class BattleSimulator(
         val hpDamage = amount - absorbed
         target.hp = max(0f, target.hp - hpDamage)
         target.damageTaken += hpDamage
+        cues += CombatCue(CueType.HIT, "boss", target.character.id, hpDamage)
         if (target.hp <= 0f) log("${target.character.name} was defeated")
     }
 

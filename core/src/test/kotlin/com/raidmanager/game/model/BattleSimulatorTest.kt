@@ -7,6 +7,24 @@ import kotlin.test.assertTrue
 
 class BattleSimulatorTest {
     @Test
+    fun `animation cues report actual damage once without changing the battle result`() {
+        val raid = formation("aegis", "luna", "rook")
+        val dungeon = PrototypeContent.dungeons.first()
+        val simulator = BattleSimulator(raid, dungeon)
+        var damage = 0f
+        repeat(500) {
+            simulator.update(0.1f)
+            val cues = simulator.drainCombatCues()
+            damage += cues.filter { it.type == BattleSimulator.CueType.HIT && it.target == "boss" }
+                .sumOf { it.amount.toDouble() }.toFloat()
+            assertTrue(simulator.drainCombatCues().isEmpty())
+        }
+        val result = simulator.result()
+        assertEquals(result.members.sumOf { it.damageDealt.toDouble() }.toFloat(), damage, 0.01f)
+        assertEquals(completeBattle(raid, dungeon), result)
+    }
+
+    @Test
     fun `same formation and dungeon produce the same result`() {
         val formation = formation("aegis", "luna", "rook")
         val dungeon = PrototypeContent.dungeons.first()

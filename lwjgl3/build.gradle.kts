@@ -18,3 +18,10 @@ dependencies {
 }
 
 kotlin { jvmToolchain(17) }
+
+tasks.register<JavaExec>("spritePreview") {
+    dependsOn("classes")
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.raidmanager.lwjgl3.SpritePreviewKt")
+    jvmArgs("-XstartOnFirstThread")
+}

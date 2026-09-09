@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
 import com.badlogic.gdx.InputAdapter
 import com.badlogic.gdx.graphics.Color
+import com.badlogic.gdx.math.Matrix4
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.raidmanager.game.GameAssets
 import com.raidmanager.game.model.BattleResult
@@ -26,6 +27,9 @@ class GameScene(
 
     private val formation = formation
     private val simulator = BattleSimulator(formation, dungeon)
+    private val stage = BattleStage(assets, formation)
+    private val stageProjection = Matrix4().setToOrtho2D(0f, 0f, 1280f, 720f)
+    private val savedProjection = Matrix4()
     private val pendingCommands = ArrayDeque<BattleCommand>()
 
     override fun keyDown(keycode: Int): Boolean {
@@ -56,6 +60,7 @@ class GameScene(
 
     override fun updateGame(delta: Float) {
         simulator.update(delta)
+        stage.update(delta, simulator.drainCombatCues(), simulator.snapshot())
         while (pendingCommands.isNotEmpty()) {
             when (pendingCommands.removeFirst()) {
                 BattleCommand.EXIT -> onExit(formation)
@@ -68,96 +73,28 @@ class GameScene(
 
     override fun renderGame(batch: SpriteBatch) {
         val snapshot = simulator.snapshot()
-        val margin = Gdx.graphics.width * 0.07f
-        Ui.text(assets, batch, dungeon.name, margin, Gdx.graphics.height - 36f, 1.2f)
-        Ui.text(
-            assets,
-            batch,
-            "TIME ${snapshot.elapsedTime.toInt()} / ${dungeon.timeLimit.toInt()}",
-            Gdx.graphics.width - margin - 170f,
-            Gdx.graphics.height - 36f,
-            0.75f,
-            Color.LIGHT_GRAY,
-        )
-
-        Ui.text(assets, batch, dungeon.enemyName, margin, Gdx.graphics.height - 86f, 0.9f, Color(1f, 0.72f, 0.45f, 1f))
-        Ui.bar(
-            assets,
-            batch,
-            margin,
-            Gdx.graphics.height - 112f,
-            Gdx.graphics.width - margin * 2f,
-            18f,
-            snapshot.enemyHp / snapshot.enemyMaxHp,
-            Color(0.72f, 0.18f, 0.16f, 1f),
-        )
-        Ui.text(
-            assets,
-            batch,
-            "${snapshot.enemyHp.toInt()} / ${snapshot.enemyMaxHp.toInt()}",
-            margin,
-            Gdx.graphics.height - 120f,
-            0.62f,
-            Color.LIGHT_GRAY,
-        )
-
-        snapshot.members.forEachIndexed { index, member ->
-            val y = Gdx.graphics.height - 190f - index * 72f
-            Ui.text(assets, batch, "${member.character.name}  ${member.character.role}", margin, y, 0.78f)
-            Ui.bar(
-                assets,
-                batch,
-                margin,
-                y - 26f,
-                Gdx.graphics.width * 0.42f,
-                14f,
-                member.hp / member.character.maxHp,
-                Color(0.18f, 0.68f, 0.34f, 1f),
-            )
-            Ui.text(
-                assets,
-                batch,
-                "HP ${member.hp.toInt()}  SHIELD ${member.shield.toInt()}  DMG ${member.damageDealt.toInt()}",
-                margin + Gdx.graphics.width * 0.45f,
-                y - 14f,
-                0.64f,
-                Color.LIGHT_GRAY,
-            )
+        savedProjection.set(batch.projectionMatrix)
+        batch.projectionMatrix = stageProjection
+        stage.render(batch, snapshot, dungeon)
+        Ui.text(assets, batch, "COMBAT EVENTS", 44f, 150f, 0.75f, Color.LIGHT_GRAY)
+        simulator.recentEvents(3).forEachIndexed { index, event ->
+            Ui.text(assets, batch, "${"%.1f".format(event.time)}  ${event.message}",
+                44f, 122f - index * 22f, 0.68f, Color.LIGHT_GRAY)
         }
-
-        Ui.text(assets, batch, "BATTLE LOG", margin, 178f, 0.8f, Color(0.55f, 0.78f, 1f, 1f))
-        simulator.recentEvents(5).forEachIndexed { index, event ->
-            Ui.text(
-                assets,
-                batch,
-                "${"%.1f".format(event.time)}  ${event.message}",
-                margin,
-                154f - index * 22f,
-                0.62f,
-                Color.LIGHT_GRAY,
-            )
-        }
-
         if (snapshot.finished) {
-            val bounds = resultButtonBounds()
-            Ui.button(
-                assets,
-                batch,
+            Ui.button(assets, batch,
                 if (snapshot.victory) "VICTORY - VIEW RESULTS" else "DEFEAT - VIEW RESULTS",
-                bounds.x,
-                bounds.y,
-                bounds.width,
-                bounds.height,
-                selected = snapshot.victory,
-            )
+                770f, 55f, 440f, 64f, selected = snapshot.victory)
         } else {
-            Ui.text(assets, batch, "AUTO BATTLE IN PROGRESS", margin, 28f, 0.68f, Color.GRAY)
+            Ui.text(assets, batch, "AUTO BATTLE  /  ESC: RETURN", 820f, 95f, 0.75f, Color.LIGHT_GRAY)
         }
+        batch.projectionMatrix = savedProjection
     }
 
     private fun resultButtonBounds(): Bounds {
-        val margin = Gdx.graphics.width * 0.07f
-        return Bounds(margin, 20f, Gdx.graphics.width - margin * 2f, 52f)
+        val scaleX = Gdx.graphics.width / 1280f
+        val scaleY = Gdx.graphics.height / 720f
+        return Bounds(770f * scaleX, 55f * scaleY, 440f * scaleX, 64f * scaleY)
     }
 
     private data class Bounds(val x: Float, val y: Float, val width: Float, val height: Float)

@@ -22,7 +22,7 @@ RaidManagerGame
        └─ BattleResultScene
 ```
 
-`BattleSimulator`는 libGDX API에 의존하지 않는 고정 간격 전투 로직이며, 같은 편성과 던전에서 재현 가능한 `BattleResult`를 만든다.
+`BattleSimulator`는 libGDX API에 의존하지 않는 고정 간격 전투 로직이며, 같은 편성과 던전에서 재현 가능한 `BattleResult`를 만든다. 전투 화면은 `BattleStage`를 통해 시뮬레이션 사건을 애니메이션으로 표현한다.
 
 ## Scene 규칙
 
@@ -30,6 +30,8 @@ RaidManagerGame
 - 현재 Scene이 입력을 받을 때만 `Gdx.input.inputProcessor`에 등록한다.
 - 입력 이벤트에서는 명령을 큐에 넣고, 실제 상태 변경은 `updateGame`에서 처리한다.
 - Scene 전환은 `RaidManagerGame`이 담당한다.
+- `GameScene`은 `BattleSimulator`의 Snapshot과 CombatCue를 받아 전투 상태와 연출을 표시한다.
+- `BattleStage`는 캐릭터와 보스의 위치, 대기 모션, 투사체, 피격, 회복, 보호막, 충격파를 담당한다.
 
 ## 리소스 관리
 
@@ -47,6 +49,18 @@ RaidManagerGame
 - 저장 가능한 게임 상태와 UI 상태를 분리한다.
 - 화면 크기와 입력 장치 차이를 흡수하는 공통 좌표/입력 계층을 검토한다.
 - 시스템 테스트가 가능하도록 순수 Kotlin 로직을 우선 분리한다.
+- 연출은 `CombatCue`를 소비하는 방식으로 연결해 렌더링 코드가 게임 규칙에 의존하지 않게 한다.
+
+## 현재 프로토타입 연출 구조
+
+```text
+BattleSimulator
+  ├─ Snapshot      → HP, 보호막, 전투 시간, 승패 상태
+  ├─ BattleResult  → 결과 화면 통계와 실패 분석
+  └─ CombatCue     → BattleStage 애니메이션
+```
+
+`GameAssets`는 공용 폰트와 1픽셀 텍스처 외에 캐릭터 실루엣과 이펙트에 사용하는 원형 텍스처를 관리한다. 실제 캐릭터 스프라이트와 파티클 리소스는 후속 작업에서 교체할 수 있다.
 
 ## 권장 의존 방향
 
