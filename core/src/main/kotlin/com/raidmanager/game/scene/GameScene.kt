@@ -28,6 +28,7 @@ class GameScene(
     private val formation = formation
     private val simulator = BattleSimulator(formation, dungeon)
     private val stage = BattleStage(assets, formation)
+    private val audio = BattleAudio(assets, formation)
     private val stageProjection = Matrix4().setToOrtho2D(0f, 0f, 1280f, 720f)
     private val savedProjection = Matrix4()
     private val pendingCommands = ArrayDeque<BattleCommand>()
@@ -60,11 +61,18 @@ class GameScene(
 
     override fun updateGame(delta: Float) {
         simulator.update(delta)
-        stage.update(delta, simulator.drainCombatCues(), simulator.snapshot())
+        val cues = simulator.drainCombatCues()
+        val snapshot = simulator.snapshot()
+        stage.update(delta, cues, snapshot)
+        audio.update(delta, cues, snapshot)
         while (pendingCommands.isNotEmpty()) {
             when (pendingCommands.removeFirst()) {
-                BattleCommand.EXIT -> onExit(formation)
+                BattleCommand.EXIT -> {
+                    assets.stopBattleSounds()
+                    onExit(formation)
+                }
                 BattleCommand.RESULTS -> if (simulator.snapshot().finished) {
+                    assets.stopBattleSounds()
                     onFinished(formation, dungeon, simulator.result())
                 }
             }
@@ -87,6 +95,10 @@ class GameScene(
                 770f, 55f, 440f, 64f, selected = snapshot.victory)
         } else {
             Ui.text(assets, batch, "AUTO BATTLE  /  ESC: RETURN", 820f, 95f, 0.75f, Color.LIGHT_GRAY)
+            if (snapshot.abilityCastRemaining > 0f) {
+                Ui.text(assets, batch, "CASTING... ${"%.1f".format(snapshot.abilityCastRemaining)} SEC  /  INTERRUPT",
+                    770f, 125f, 0.7f, Color.SALMON)
+            }
         }
         batch.projectionMatrix = savedProjection
     }

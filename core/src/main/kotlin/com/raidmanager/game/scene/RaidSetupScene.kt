@@ -19,11 +19,13 @@ class RaidSetupScene(
 ) : InputAdapter(), Scene {
     private sealed interface SetupCommand {
         data class Toggle(val index: Int) : SetupCommand
+        data class MonsterCount(val delta: Int) : SetupCommand
         data object Continue : SetupCommand
         data object Back : SetupCommand
     }
 
     private val selectedIds = initialFormation?.members?.mapTo(mutableSetOf()) { it.id } ?: mutableSetOf()
+    private var monsterCount = initialFormation?.monsterCount ?: RaidFormation.MIN_MONSTER_COUNT
     private val pendingCommands = ArrayDeque<SetupCommand>()
     private var message = "Select exactly ${RaidFormation.PARTY_SIZE} members"
 
@@ -50,6 +52,16 @@ class RaidSetupScene(
             pendingCommands.addLast(SetupCommand.Continue)
             return true
         }
+        val minus = monsterCountBounds(-1)
+        val plus = monsterCountBounds(1)
+        if (Ui.contains(screenX, screenY, minus.x, minus.y, minus.width, minus.height, Gdx.graphics.height)) {
+            pendingCommands.addLast(SetupCommand.MonsterCount(-1))
+            return true
+        }
+        if (Ui.contains(screenX, screenY, plus.x, plus.y, plus.width, plus.height, Gdx.graphics.height)) {
+            pendingCommands.addLast(SetupCommand.MonsterCount(1))
+            return true
+        }
         return false
     }
 
@@ -68,6 +80,7 @@ class RaidSetupScene(
                 SetupCommand.Back -> onBack()
                 SetupCommand.Continue -> continueToDungeon()
                 is SetupCommand.Toggle -> toggle(command.index)
+                is SetupCommand.MonsterCount -> adjustMonsterCount(command.delta)
             }
         }
     }
@@ -75,6 +88,12 @@ class RaidSetupScene(
     override fun renderGame(batch: SpriteBatch) {
         Ui.text(assets, batch, "BUILD YOUR RAID", margin(), Gdx.graphics.height - 42f, 1.35f)
         Ui.text(assets, batch, message, margin(), Gdx.graphics.height - 74f, 0.78f, Color.LIGHT_GRAY)
+        Ui.text(assets, batch, "MONSTERS", margin(), 126f, 0.78f, Color.LIGHT_GRAY)
+        val minus = monsterCountBounds(-1)
+        val plus = monsterCountBounds(1)
+        Ui.button(assets, batch, "-", minus.x, minus.y, minus.width, minus.height, monsterCount > RaidFormation.MIN_MONSTER_COUNT)
+        Ui.text(assets, batch, "$monsterCount", margin() + 86f, 143f, 0.95f, Color.WHITE)
+        Ui.button(assets, batch, "+", plus.x, plus.y, plus.width, plus.height, monsterCount < RaidFormation.MAX_MONSTER_COUNT)
 
         roster.forEachIndexed { index, character ->
             val bounds = cardBounds(index)
@@ -123,7 +142,12 @@ class RaidSetupScene(
             message = "Select exactly ${RaidFormation.PARTY_SIZE} members"
             return
         }
-        onContinue(RaidFormation(members))
+        onContinue(RaidFormation(members, monsterCount))
+    }
+
+    private fun adjustMonsterCount(delta: Int) {
+        monsterCount = (monsterCount + delta).coerceIn(RaidFormation.MIN_MONSTER_COUNT, RaidFormation.MAX_MONSTER_COUNT)
+        message = "${selectedIds.size} / ${RaidFormation.PARTY_SIZE} selected · $monsterCount monster(s)"
     }
 
     private fun margin(): Float = Gdx.graphics.width * 0.07f
@@ -142,6 +166,12 @@ class RaidSetupScene(
     private fun continueBounds(): Bounds {
         val width = 240f
         return Bounds(Gdx.graphics.width - margin() - width, 44f, width, 58f)
+    }
+
+    private fun monsterCountBounds(delta: Int): Bounds {
+        val size = 42f
+        val x = if (delta < 0) margin() else margin() + 130f
+        return Bounds(x, 132f, size, 34f)
     }
 
     private data class Bounds(val x: Float, val y: Float, val width: Float, val height: Float)

@@ -1,0 +1,39 @@
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Kotlin/Android build and local tooling
+.kotlin/
+local.properties
+
+# IntelliJ IDEA / Android Studio
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Compiled and packaged artifacts
+*.class
+*.jar
+*.war
+*.ear
+*.apk
+*.aab
+*.zip
+*.tar
+
+# Native and OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# Secrets and environment overrides
+.env
+.env.*
+!.env.example

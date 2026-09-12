@@ -12,6 +12,15 @@ import com.badlogic.gdx.utils.Disposable
 
 /** Scene에서 함께 사용하는 그래픽 리소스를 생성하고 해제한다. */
 class GameAssets : Disposable {
+    private val battleSounds = listOf("hit", "shot", "skill", "heal", "shield", "interrupt", "wave", "start", "victory", "defeat")
+        .associateWith { name -> com.badlogic.gdx.Gdx.audio.newSound(com.badlogic.gdx.Gdx.files.internal("audio/$name.wav")) }
+
+    fun playBattleSound(name: String, volume: Float) {
+        battleSounds[name]?.play(volume)
+    }
+
+    fun stopBattleSounds() = battleSounds.values.forEach { it.stop() }
+
     val titleImage = Texture("Title.png")
     val font = BitmapFont()
     val textLayout = GlyphLayout()
@@ -19,6 +28,23 @@ class GameAssets : Disposable {
     val circleTexture: Texture
     private val heroSheet = Texture("sprites/raid-heroes.png")
     private val monsterSheet = Texture("sprites/raid-monsters.png")
+    private val effectSheet = Texture("sprites/monster-vfx.png").apply {
+        setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+    }
+    val monsterEffects = List(4) { index ->
+        TextureRegion(effectSheet, index % 2 * (effectSheet.width / 2), index / 2 * (effectSheet.height / 2),
+            effectSheet.width / 2, effectSheet.height / 2)
+    }
+    private val heroEffectSheet = Texture("sprites/hero-vfx.png").apply {
+        setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+    }
+    private val heroEffects = com.raidmanager.game.model.SkillType.entries.associateWith { skill ->
+        val width = heroEffectSheet.width / 3
+        val height = heroEffectSheet.height / 2
+        TextureRegion(heroEffectSheet, skill.ordinal % 3 * width, skill.ordinal / 3 * height, width, height)
+    }
+
+    fun heroEffect(skill: com.raidmanager.game.model.SkillType): TextureRegion = heroEffects.getValue(skill)
     private val battleBackgrounds = listOf("colossus", "swarm", "slime").associateWith { id ->
         Texture("backgrounds/$id.png").apply {
             setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
@@ -27,6 +53,22 @@ class GameAssets : Disposable {
     private val heroRows = listOf("aegis", "luna", "rook", "ember", "nyx", "mira")
     data class SpriteFrame(val region: TextureRegion, val footX: Float, val footY: Float)
     enum class SpritePose { IDLE, ACTION, HURT }
+
+    private val animatedSheets = listOf("aegis", "luna", "rook", "ember", "nyx", "mira", "colossus", "swarm", "slime")
+        .associateWith { id -> Texture("sprites/animated/$id.png").apply {
+            setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+        } }
+    private val animatedFrames = animatedSheets.mapValues { (_, sheet) ->
+        List(16) { index ->
+            val left = index % 4 * sheet.width / 4
+            val top = index / 4 * sheet.height / 4
+            val width = (index % 4 + 1) * sheet.width / 4 - left
+            val height = (index / 4 + 1) * sheet.height / 4 - top
+            SpriteFrame(TextureRegion(sheet, left, top, width, height), width * 0.5f, height * 0.06f)
+        }
+    }
+
+    fun animatedFrame(id: String, index: Int): SpriteFrame = animatedFrames.getValue(id)[index.coerceIn(0, 15)]
 
     // Measured from the authored 887 x 1774 sheet; generated poses do not form an exact uniform grid.
     private val heroFrames = heroRows.mapIndexed { row, id ->
@@ -114,12 +156,16 @@ class GameAssets : Disposable {
     }
 
     override fun dispose() {
+        animatedSheets.values.forEach { it.dispose() }
+        battleSounds.values.forEach { it.dispose() }
         titleImage.dispose()
         buttonTexture.dispose()
         circleTexture.dispose()
         heroSheet.dispose()
         heroShader.dispose()
         monsterSheet.dispose()
+        effectSheet.dispose()
+        heroEffectSheet.dispose()
         monsterShader.dispose()
         battleBackgrounds.values.forEach { it.dispose() }
         font.dispose()

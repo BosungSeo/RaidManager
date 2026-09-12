@@ -2,12 +2,12 @@ package com.raidmanager.game.model
 
 object PrototypeContent {
     val characters = listOf(
-        CharacterDefinition("aegis", "AEGIS", Role.TANK, 150f, 7f, 1.5f, "FORTIFY", SkillType.GUARD, 6f),
-        CharacterDefinition("luna", "LUNA", Role.HEALER, 88f, 4f, 1.8f, "MEND", SkillType.HEAL, 3.8f),
-        CharacterDefinition("rook", "ROOK", Role.DPS, 92f, 12f, 1.1f, "EXECUTE", SkillType.STRIKE, 5f),
-        CharacterDefinition("ember", "EMBER", Role.DPS, 84f, 9f, 1.25f, "FIRESTORM", SkillType.CLEAVE, 5f),
-        CharacterDefinition("nyx", "NYX", Role.SUPPORT, 94f, 6f, 1.4f, "DISRUPT", SkillType.INTERRUPT, 5.5f),
-        CharacterDefinition("mira", "MIRA", Role.SUPPORT, 98f, 7f, 1.35f, "SUNDER", SkillType.SUNDER, 4.5f),
+        CharacterDefinition("aegis", "AEGIS", Role.TANK, 150f, 7f, 1.5f, "FORTIFY", SkillType.GUARD, 6f, moveSpeed = 400f),
+        CharacterDefinition("luna", "LUNA", Role.HEALER, 88f, 4f, 1.8f, "MEND", SkillType.HEAL, 3.8f, moveSpeed = 240f),
+        CharacterDefinition("rook", "ROOK", Role.DPS, 92f, 12f, 1.1f, "EXECUTE", SkillType.STRIKE, 5f, moveSpeed = 430f),
+        CharacterDefinition("ember", "EMBER", Role.DPS, 84f, 9f, 1.25f, "FIRESTORM", SkillType.CLEAVE, 5f, moveSpeed = 250f),
+        CharacterDefinition("nyx", "NYX", Role.SUPPORT, 94f, 6f, 1.4f, "DISRUPT", SkillType.INTERRUPT, 5.5f, moveSpeed = 280f),
+        CharacterDefinition("mira", "MIRA", Role.SUPPORT, 98f, 7f, 1.35f, "SUNDER", SkillType.SUNDER, 4.5f, moveSpeed = 260f),
     )
 
     val dungeons = listOf(
@@ -20,6 +20,7 @@ object PrototypeContent {
             enemyAttack = 13f,
             enemyAttackInterval = 2.1f,
             mechanic = DungeonMechanic.BURST,
+            enemyMoveSpeed = 85f,
             mechanicInterval = 7f,
         ),
         DungeonDefinition(
@@ -31,6 +32,7 @@ object PrototypeContent {
             enemyAttack = 10f,
             enemyAttackInterval = 1.7f,
             mechanic = DungeonMechanic.SWARM,
+            enemyMoveSpeed = 115f,
             mechanicInterval = 5f,
         ),
         DungeonDefinition(
@@ -42,6 +44,7 @@ object PrototypeContent {
             enemyAttack = 11f,
             enemyAttackInterval = 1.9f,
             mechanic = DungeonMechanic.REGEN,
+            enemyMoveSpeed = 70f,
             mechanicInterval = 4f,
         ),
     )

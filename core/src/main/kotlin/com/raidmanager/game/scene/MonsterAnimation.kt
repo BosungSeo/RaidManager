@@ -8,7 +8,7 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 /** Cue-driven presentation state only; does not affect damage, cooldowns or battle outcomes. */
-internal class MonsterAnimation {
+internal class MonsterAnimation(private val enemyId: String = "boss", phase: Float = 0f) {
     data class Motion(
         val pose: SpritePose,
         val offsetX: Float = 0f,
@@ -21,7 +21,7 @@ internal class MonsterAnimation {
         val wave: Float = 0f,
     )
 
-    private var clock = 0f
+    private var clock = phase
     private var actionAge = 10f
     private var hitAge = 10f
     private var interruptAge = 10f
@@ -48,14 +48,14 @@ internal class MonsterAnimation {
         if (finished) return
         cues.forEach { cue ->
             when {
-                cue.type == CueType.INTERRUPT && cue.target == "boss" -> interruptAge = 0f
-                cue.type == CueType.HIT && cue.target == "boss" && cue.amount > 0f -> hitAge = 0f
-                cue.source == "boss" && cue.type == CueType.WAVE -> {
+                cue.type == CueType.INTERRUPT && cue.target == enemyId -> interruptAge = 0f
+                cue.type == CueType.HIT && cue.target == enemyId && cue.amount > 0f -> hitAge = 0f
+                cue.source == enemyId && cue.type == CueType.WAVE -> {
                     actionAge = 0f
                     waveAge = 0f
                 }
-                cue.source == "boss" && cue.type == CueType.HEAL -> healAge = 0f
-                cue.source == "boss" && cue.type == CueType.HIT -> actionAge = 0f
+                cue.source == enemyId && cue.type == CueType.HEAL -> healAge = 0f
+                cue.source == enemyId && cue.type == CueType.HIT -> actionAge = 0f
             }
         }
         if (interruptAge < 0.5f) {

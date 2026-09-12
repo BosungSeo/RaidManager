@@ -11,6 +11,17 @@ import kotlin.test.assertTrue
 
 class MonsterAnimationTest {
     @Test
+    fun `only the addressed monster reacts to combat cues`() {
+        val first = MonsterAnimation("boss")
+        val second = MonsterAnimation("boss-1")
+        val cues = listOf(CombatCue(CueType.HIT, "boss-1", "aegis", 10f))
+        first.update(0f, cues, 100f, false)
+        second.update(0f, cues, 100f, false)
+        assertEquals(SpritePose.IDLE, first.motion(DungeonMechanic.BURST).pose)
+        assertEquals(SpritePose.ACTION, second.motion(DungeonMechanic.BURST).pose)
+    }
+
+    @Test
     fun `boss hit triggers leftward action then returns to idle`() {
         val animation = MonsterAnimation()
         animation.update(0f, listOf(CombatCue(CueType.HIT, "boss", "aegis", 10f)), 100f, false)

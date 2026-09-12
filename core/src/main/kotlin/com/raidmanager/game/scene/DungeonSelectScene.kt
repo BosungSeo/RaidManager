@@ -48,7 +48,7 @@ class DungeonSelectScene(
         Ui.text(
             assets,
             batch,
-            "RAID: ${formation.members.joinToString(" / ") { it.name }}",
+            "RAID: ${formation.members.joinToString(" / ") { it.name }}   MONSTERS: ${formation.monsterCount}",
             margin,
             Gdx.graphics.height - 76f,
             0.72f,
