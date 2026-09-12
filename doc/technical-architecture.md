@@ -71,3 +71,19 @@ Scene → Application/GameState → Domain Model
 ```
 
 도메인 모델과 전투 시뮬레이터는 libGDX 렌더링 API에 의존하지 않아야 한다. 이를 통해 데스크톱 실행 없이도 전투 규칙을 단위 테스트할 수 있다.
+
+## 리팩토링 후 수정 위치
+
+- 편성 선택·정원·몬스터 수: `model/RaidSetupState.kt`.
+- 전투 밸런스·이동·어그로 규칙: `model/BattleRules.kt`.
+- 기본 능력치와 파생 능력치 계산: `model/StatRules.kt`, `model/StatCalculator.kt`.
+- 캐릭터·던전별 콘텐츠 수치: `model/PrototypeContent.kt`.
+- 편성 화면 입력·전환: `scene/RaidSetupScene.kt`; 배치·표시: `scene/RaidSetupView.kt`.
+- 메뉴·편성·던전·결과 화면의 배치와 색상: `scene/SceneStyle.kt`.
+- 전투 좌표 투영·애니메이션·효과음: `scene/BattlePresentationSettings.kt`.
+- 실행 프레임 제한과 화면 초기화 색상: `GameRuntimeSettings.kt`.
+
+설정 값에는 한글로 의미와 단위를 설명한다. 같은 숫자라도 의미가 다른 설정은 별도로 관리한다.
+단순한 초기값·정규화 범위·중앙 정렬의 나눗셈은 수식에 남기고, 조정 가능한 밸런스와 표현 수치는 설정에서 관리한다.
+복잡한 계산 함수는 한글 주석으로 계산 목적과 방식을 설명한다.
+이번 변경은 기존 전투 수치를 유지하며, 상태창의 파생 능력치를 전투에 새로 적용하지 않는다.

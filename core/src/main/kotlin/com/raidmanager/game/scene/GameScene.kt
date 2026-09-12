@@ -1,5 +1,6 @@
 package com.raidmanager.game.scene
 
+import com.raidmanager.game.scene.SceneStyle.Game as Style
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
 import com.badlogic.gdx.InputAdapter
@@ -29,7 +30,7 @@ class GameScene(
     private val simulator = BattleSimulator(formation, dungeon)
     private val stage = BattleStage(assets, formation)
     private val audio = BattleAudio(assets, formation)
-    private val stageProjection = Matrix4().setToOrtho2D(0f, 0f, 1280f, 720f)
+    private val stageProjection = Matrix4().setToOrtho2D(0f, 0f, Style.WIDTH, Style.HEIGHT)
     private val savedProjection = Matrix4()
     private val pendingCommands = ArrayDeque<BattleCommand>()
 
@@ -84,30 +85,30 @@ class GameScene(
         savedProjection.set(batch.projectionMatrix)
         batch.projectionMatrix = stageProjection
         stage.render(batch, snapshot, dungeon)
-        Ui.text(assets, batch, "COMBAT EVENTS", 44f, 150f, 0.75f, Color.LIGHT_GRAY)
-        simulator.recentEvents(3).forEachIndexed { index, event ->
+        Ui.text(assets, batch, "COMBAT EVENTS", Style.EVENT_X, Style.EVENT_TITLE_Y, Style.LABEL_SCALE, Color.LIGHT_GRAY)
+        simulator.recentEvents(Style.EVENT_COUNT).forEachIndexed { index, event ->
             Ui.text(assets, batch, "${"%.1f".format(event.time)}  ${event.message}",
-                44f, 122f - index * 22f, 0.68f, Color.LIGHT_GRAY)
+                Style.EVENT_X, Style.EVENT_Y - index * Style.EVENT_STEP, Style.EVENT_SCALE, Color.LIGHT_GRAY)
         }
         if (snapshot.finished) {
             Ui.button(assets, batch,
                 if (snapshot.victory) "VICTORY - VIEW RESULTS" else "DEFEAT - VIEW RESULTS",
-                770f, 55f, 440f, 64f, selected = snapshot.victory)
+                Style.RESULT_X, Style.RESULT_Y, Style.RESULT_WIDTH, Style.RESULT_HEIGHT, selected = snapshot.victory)
         } else {
-            Ui.text(assets, batch, "AUTO BATTLE  /  ESC: RETURN", 820f, 95f, 0.75f, Color.LIGHT_GRAY)
+            Ui.text(assets, batch, "AUTO BATTLE  /  ESC: RETURN", Style.AUTO_X, Style.AUTO_Y, Style.LABEL_SCALE, Color.LIGHT_GRAY)
             if (snapshot.abilityCastRemaining > 0f) {
                 Ui.text(assets, batch, "CASTING... ${"%.1f".format(snapshot.abilityCastRemaining)} SEC  /  INTERRUPT",
-                    770f, 125f, 0.7f, Color.SALMON)
+                    Style.RESULT_X, Style.CAST_Y, Style.CAST_SCALE, Color.SALMON)
             }
         }
         batch.projectionMatrix = savedProjection
     }
 
+    /** 고정 전투 좌표를 실제 창의 가로·세로 배율로 변환해 버튼 입력 영역을 맞춘다. */
     private fun resultButtonBounds(): Bounds {
-        val scaleX = Gdx.graphics.width / 1280f
-        val scaleY = Gdx.graphics.height / 720f
-        return Bounds(770f * scaleX, 55f * scaleY, 440f * scaleX, 64f * scaleY)
+        val scaleX = Gdx.graphics.width / Style.WIDTH
+        val scaleY = Gdx.graphics.height / Style.HEIGHT
+        return Bounds(Style.RESULT_X * scaleX, Style.RESULT_Y * scaleY, Style.RESULT_WIDTH * scaleX, Style.RESULT_HEIGHT * scaleY)
     }
 
-    private data class Bounds(val x: Float, val y: Float, val width: Float, val height: Float)
 }

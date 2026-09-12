@@ -13,10 +13,11 @@ import com.raidmanager.game.model.DungeonDefinition
 import com.raidmanager.game.model.DungeonMechanic
 import com.raidmanager.game.model.RaidFormation
 import com.raidmanager.game.model.Role
+import com.raidmanager.game.scene.BattleStageStyle as Style
 import kotlin.math.sin
 import kotlin.math.abs
 
-/** Presentation only: consumes combat cues without changing simulation rules. Coordinates: 1280 x 720. */
+/** 전투 상태를 읽어 화면에 표현한다. 게임 규칙은 변경하지 않으며 좌표계는 1280 × 720이다. */
 internal class BattleStage(private val assets: GameAssets, private val formation: RaidFormation) {
     private data class Effect(val cue: CombatCue, var age: Float = 0f)
     private data class Popup(
@@ -42,11 +43,31 @@ internal class BattleStage(private val assets: GameAssets, private val formation
     fun update(delta: Float, cues: List<CombatCue>, snapshot: BattleSimulator.Snapshot) {
         clock += delta
         if (snapshot.finished) resultAge += delta
-        shake = (shake - delta * 3.5f).coerceAtLeast(0f)
+        shake = (shake - delta * Style.SHAKE_DECAY).coerceAtLeast(0f)
         effects.forEach { it.age += delta }
         popups.forEach { it.age += delta }
-        effects.removeAll { it.age > 1.15f }
-        popups.removeAll { it.age > 1.4f }
+        effects.removeAll { it.age > Style.EFFECT_LIFETIME }
+        popups.removeAll { it.age > Style.POPUP_LIFETIME }
+        addCueEffects(cues, snapshot)
+        if (previousEnemyHp != Float.MAX_VALUE && snapshot.enemyHp <= 0f && previousEnemyHp > 0f) shake = Style.DEATH_SHAKE
+        previousEnemyHp = snapshot.enemyHp
+        moving.clear()
+        fun follow(id: String, x: Float, y: Float, alive: Boolean) {
+            val projected = Vector2(BattleProjection.x(x, y), BattleProjection.y(x, y))
+            val position = positions.getOrPut(id) { projected.cpy() }
+            if (alive && !snapshot.finished && position.dst(projected) > Style.MOVEMENT_THRESHOLD) moving += id
+            if (!alive || snapshot.finished) position.set(projected)
+            else position.lerp(projected, (delta * Style.FOLLOW_SPEED).coerceIn(0f, 1f))
+        }
+        snapshot.members.forEach { follow(it.character.id, it.x, it.y, it.hp > 0f) }
+        snapshot.enemies.forEach { follow(it.id, it.x, it.y, it.hp > 0f) }
+        snapshot.enemies.forEachIndexed { index, enemy ->
+            monsterAnimations.getOrPut(enemy.id) { MonsterAnimation(enemy.id, index * Style.MONSTER_PHASE_SPACING) }
+                .update(delta, cues, enemy.hp, snapshot.finished)
+        }
+    }
+
+    private fun addCueEffects(cues: List<CombatCue>, snapshot: BattleSimulator.Snapshot) {
         cues.forEach { cue ->
             effects += Effect(cue)
             val isDamage = cue.type == CueType.HIT && cue.amount > 0f
@@ -67,33 +88,17 @@ internal class BattleStage(private val assets: GameAssets, private val formation
                 else -> null
             }
             if (text != null) {
-                val lane = popups.count { it.target == cue.target && it.age < 0.65f } % 4
+                val lane = popups.count { it.target == cue.target && it.age < Style.POPUP_LANE_WINDOW } % Style.POPUP_LANES
                 val targetPosition = snapshot.members.firstOrNull { it.character.id == cue.target }
                     ?.let { Vector2(BattleProjection.x(it.x, it.y), BattleProjection.y(it.x, it.y)) }
                     ?: snapshot.enemies.firstOrNull { it.id == cue.target }
                         ?.let { Vector2(BattleProjection.x(it.x, it.y), BattleProjection.y(it.x, it.y)) }
                     ?: Vector2(x(cue.target), y(cue.target))
-                popups += Popup(text, targetPosition.x + (lane % 2 * 2 - 1) * 24f,
-                    targetPosition.y + 85f + lane * 23f, popupColor, cue.target,
+                popups += Popup(text, targetPosition.x + (lane % 2 * 2 - 1) * Style.POPUP_X_SPACING,
+                    targetPosition.y + Style.POPUP_BASE_HEIGHT + lane * Style.POPUP_ROW_HEIGHT, popupColor, cue.target,
                     cue.rearAttack || cue.skillType != null || cue.type == CueType.INTERRUPT)
             }
-            if (isDamage && cue.amount >= 30f || cue.type == CueType.WAVE) shake = maxOf(shake, 0.24f)
-        }
-        if (previousEnemyHp != Float.MAX_VALUE && snapshot.enemyHp <= 0f && previousEnemyHp > 0f) shake = 0.35f
-        previousEnemyHp = snapshot.enemyHp
-        moving.clear()
-        fun follow(id: String, x: Float, y: Float, alive: Boolean) {
-            val projected = Vector2(BattleProjection.x(x, y), BattleProjection.y(x, y))
-            val position = positions.getOrPut(id) { projected.cpy() }
-            if (alive && !snapshot.finished && position.dst(projected) > 2f) moving += id
-            if (!alive || snapshot.finished) position.set(projected)
-            else position.lerp(projected, (delta * 18f).coerceIn(0f, 1f))
-        }
-        snapshot.members.forEach { follow(it.character.id, it.x, it.y, it.hp > 0f) }
-        snapshot.enemies.forEach { follow(it.id, it.x, it.y, it.hp > 0f) }
-        snapshot.enemies.forEachIndexed { index, enemy ->
-            monsterAnimations.getOrPut(enemy.id) { MonsterAnimation(enemy.id, index * 1.7f) }
-                .update(delta, cues, enemy.hp, snapshot.finished)
+            if (isDamage && cue.amount >= Style.SHAKE_DAMAGE_THRESHOLD || cue.type == CueType.WAVE) shake = maxOf(shake, Style.HIT_SHAKE)
         }
     }
 
@@ -124,6 +129,55 @@ internal class BattleStage(private val assets: GameAssets, private val formation
             DungeonMechanic.SWARM -> violet
             DungeonMechanic.REGEN -> green
         }
+        drawBackgroundAndHeader(batch, snapshot, dungeon, theme)
+
+        for (gx in 180..1100 step 92) {
+            line(batch, BattleProjection.x(gx.toFloat(), 150f), BattleProjection.y(gx.toFloat(), 150f),
+                BattleProjection.x(gx.toFloat(), 650f), BattleProjection.y(gx.toFloat(), 650f), blue, 1f, 0.12f)
+        }
+        for (gy in 150..650 step 50) {
+            line(batch, BattleProjection.x(180f, gy.toFloat()), BattleProjection.y(180f, gy.toFloat()),
+                BattleProjection.x(1100f, gy.toFloat()), BattleProjection.y(1100f, gy.toFloat()), blue, 1f, 0.12f)
+        }
+        snapshot.members.filter { it.hp > 0f }.forEach { member ->
+            val target = member.targetId
+            if (target != null && !snapshot.finished) {
+                val tint = if (member.intent == BattleSimulator.MovementIntent.RETREAT) red else color(member.character.role)
+                line(batch, x(member.character.id), y(member.character.id), x(target), y(target), tint, 1f, 0.18f)
+            }
+        }
+
+        if (dungeon.mechanic != DungeonMechanic.REGEN) drawThreatWarnings(batch, snapshot)
+        val actors = snapshot.members.map { it.character.id } + snapshot.enemies.map { it.id }
+        actors.sortedByDescending { y(it) }.forEach { id ->
+            val member = snapshot.members.firstOrNull { it.character.id == id }
+            if (member != null) drawMember(batch, member, snapshot.finished)
+            else drawEnemy(batch, snapshot.enemies.first { it.id == id }, dungeon, snapshot.finished)
+        }
+        drawCombatHud(batch, snapshot)
+        effects.forEach { drawEffect(batch, it) }
+        drawMonsterEffects(batch, snapshot, dungeon)
+        popups.forEach { drawPopup(batch, it) }
+        drawStatusIcons(batch, snapshot)
+        if (!snapshot.finished && snapshot.abilityCastRemaining > 0f && dungeon.mechanic != DungeonMechanic.REGEN) {
+            for (i in 0 until 10) {
+                val tint = Color(danger).also { it.a = (1f - i / 10f) * (0.12f + abs(sin(clock * 5f)) * 0.1f) }
+                rect(batch, i * 5f, 175f, 5f, 395f, tint)
+                rect(batch, 1275f - i * 5f, 175f, 5f, 395f, tint)
+            }
+        }
+        if (clock < Style.ENGAGE_DURATION && !snapshot.finished) {
+            val alpha = ((Style.ENGAGE_DURATION - clock) / 0.5f).coerceIn(0f, 1f)
+            rect(batch, 420f, 440f, 440f, 58f, Color(0.02f, 0.03f, 0.06f, alpha * 0.8f))
+            Ui.text(assets, batch, "RAID ENGAGE", 530f, 479f, 1.4f, Color(gold).also { it.a = alpha })
+        }
+        if (snapshot.finished && snapshot.victory) drawVictoryBurst(batch)
+        batch.color = Color.WHITE
+    }
+
+    private fun drawBackgroundAndHeader(
+        batch: SpriteBatch, snapshot: BattleSimulator.Snapshot, dungeon: DungeonDefinition, theme: Color,
+    ) {
         batch.setColor(0.88f, 0.88f, 0.88f, 1f)
         val offsetX = if (shake > 0f) sin(clock * 91f) * shake * 18f else 0f
         val offsetY = if (shake > 0f) sin(clock * 73f) * shake * 12f else 0f
@@ -143,98 +197,9 @@ internal class BattleStage(private val assets: GameAssets, private val formation
         Ui.bar(assets, batch, 770f, 593f, 440f, 10f, snapshot.enemyHp / snapshot.enemyMaxHp, red)
         Ui.text(assets, batch, "${snapshot.enemyHp.toInt()} HP", 1120f, 625f, 0.7f)
 
-        for (gx in 180..1100 step 92) {
-            line(batch, BattleProjection.x(gx.toFloat(), 150f), BattleProjection.y(gx.toFloat(), 150f),
-                BattleProjection.x(gx.toFloat(), 650f), BattleProjection.y(gx.toFloat(), 650f), blue, 1f, 0.12f)
-        }
-        for (gy in 150..650 step 50) {
-            line(batch, BattleProjection.x(180f, gy.toFloat()), BattleProjection.y(180f, gy.toFloat()),
-                BattleProjection.x(1100f, gy.toFloat()), BattleProjection.y(1100f, gy.toFloat()), blue, 1f, 0.12f)
-        }
-        snapshot.members.filter { it.hp > 0f }.forEach { member ->
-            val target = member.targetId
-            if (target != null && !snapshot.finished) {
-                val tint = if (member.intent == BattleSimulator.MovementIntent.RETREAT) red else color(member.character.role)
-                line(batch, x(member.character.id), y(member.character.id), x(target), y(target), tint, 1f, 0.18f)
-            }
-        }
+    }
 
-        fun drawMember(member: BattleSimulator.MemberSnapshot) {
-            val id = member.character.id
-            val actionAge = effects.filter { it.cue.source == id }
-                .minOfOrNull { it.age }
-            val hitAge = effects.filter { it.cue.target == id && it.cue.type == CueType.HIT }
-                .minOfOrNull { it.age }
-            val alive = member.hp > 0f
-            val acting = alive && actionAge != null && actionAge < 0.28f
-            val hurt = alive && hitAge != null && hitAge < 0.24f
-            val melee = member.character.attackStyle == AttackStyle.MELEE
-            val facing = if (member.facingX * 0.82f - member.facingY * 0.6f < 0f) -1f else 1f
-            val advance = if (acting && !hurt && melee) sin(actionAge!! / 0.28f * MathUtils.PI) * 8f else 0f
-            val recoil = if (hurt) sin(hitAge!! / 0.24f * MathUtils.PI) * -4f else 0f
-            val px = x(id) + (advance + recoil) * facing
-            val running = id in moving && alive && !acting && !hurt
-            val py = y(id) + 37f + if (running) kotlin.math.abs(sin(clock * 18f + id.hashCode())) * 3f else 0f
-            val tint = color(member.character.role)
-            disc(batch, px, py - 37f, 32f, Color.BLACK, 0.4f, 0.28f)
-            if (running) {
-                for (i in 1..3) disc(batch, px - i * 10f, y(id), 5f - i, tint, 0.2f, 0.5f)
-            }
-            val frame = assets.animatedFrame(id,
-                SpriteTimeline.frame(clock + id.length * 0.13f, running, actionAge, hitAge, alive, snapshot.finished))
-            // Keep subtle foot-anchored motion on top of the authored frame animation.
-            val breath = if (alive && !acting && !hurt && !snapshot.finished) sin(clock * 3f + y(id)) * 0.018f else 0f
-            val castLean = if (acting && !melee && !hurt) sin(actionAge!! / 0.28f * MathUtils.PI) * -5f else 0f
-            batch.setColor(1f, if (hurt) 0.6f else 1f, if (hurt) 0.6f else 1f, if (alive) 1f else 0.45f)
-            val previousShader = batch.shader
-            batch.shader = assets.heroShader
-            val scale = 86f / frame.region.regionHeight
-            val footX = frame.footX * scale
-            val footY = frame.footY * scale
-            batch.draw(frame.region, px - footX, py - 37f - footY, footX, footY,
-                frame.region.regionWidth * scale, frame.region.regionHeight * scale,
-                facing, 1f + breath, (if (!alive) 80f else if (running) -6f else castLean) * facing)
-            batch.shader = previousShader
-            batch.color = Color.WHITE
-            if (alive && member.shield > 0f) {
-                drawPersistentShield(batch, px, py, member.shield, hitAge)
-            }
-            if (!alive) Ui.text(assets, batch, "DOWN", px - 22f, py + 14f, 0.7f, red)
-            Ui.text(assets, batch, member.character.name, px - 28f, py + 38f, 0.5f, tint)
-            Ui.bar(assets, batch, px - 46f, py - 53f, 92f, 5f, member.hp / member.character.maxHp, green)
-        }
-
-        fun drawEnemy(enemy: BattleSimulator.EnemySnapshot) {
-            val motion = monsterAnimations[enemy.id]?.motion(dungeon.mechanic) ?: MonsterAnimation.Motion(GameAssets.SpritePose.IDLE)
-            val actionAge = effects.filter { it.cue.source == enemy.id }.minOfOrNull { it.age }
-            val hitAge = effects.filter { it.cue.target == enemy.id && it.cue.type == CueType.HIT }
-                .minOfOrNull { it.age }
-            val monster = assets.animatedFrame(dungeon.id,
-                SpriteTimeline.frame(clock, enemy.id in moving, actionAge, hitAge, enemy.hp > 0f, snapshot.finished))
-            val scale = (if (dungeon.mechanic == DungeonMechanic.REGEN) 112f else 145f) / monster.region.regionHeight
-            val px = x(enemy.id)
-            val groundY = y(enemy.id)
-            val footX = monster.footX * scale
-            val footY = monster.footY * scale
-            val facing = if (enemy.facingX * 0.82f - enemy.facingY * 0.6f > 0f) -1f else 1f
-            disc(batch, px, groundY, 65f, Color.BLACK, 0.5f, 0.22f)
-            val previousShader = batch.shader
-            batch.shader = assets.monsterShader
-            batch.setColor(1f, if (motion.hurt) 0.62f else 1f, if (motion.hurt) 0.62f else 1f, motion.alpha)
-            batch.draw(monster.region, px + motion.offsetX * facing - footX, groundY - footY, footX, footY,
-                monster.region.regionWidth * scale, monster.region.regionHeight * scale,
-                motion.scaleX * facing, motion.scaleY, motion.rotation * facing)
-            batch.shader = previousShader
-            batch.color = Color.WHITE
-            Ui.bar(assets, batch, px - 48f, groundY - 16f, 96f, 6f, enemy.hp / enemy.maxHp, red)
-            Ui.text(assets, batch, "#${enemyIndex(enemy.id) + 1}  ${enemy.hp.toInt()} HP", px - 48f, groundY - 23f, 0.55f)
-        }
-        if (dungeon.mechanic != DungeonMechanic.REGEN) drawThreatWarnings(batch, snapshot)
-        val actors = snapshot.members.map { it.character.id } + snapshot.enemies.map { it.id }
-        actors.sortedByDescending { y(it) }.forEach { id ->
-            val member = snapshot.members.firstOrNull { it.character.id == id }
-            if (member != null) drawMember(member) else drawEnemy(snapshot.enemies.first { it.id == id })
-        }
+    private fun drawCombatHud(batch: SpriteBatch, snapshot: BattleSimulator.Snapshot) {
         // Fixed HUD rows keep labels and threat percentages out of the moving sprites.
         snapshot.members.forEachIndexed { index, member ->
             val target = member.targetId?.let { "#${enemyIndex(it) + 1}" } ?: "-"
@@ -258,26 +223,83 @@ internal class BattleStage(private val assets: GameAssets, private val formation
                     770f + enemySlot * 150f, 565f - index * 14f, 0.48f, if (active) gold else Color.LIGHT_GRAY)
             }
         }
-        effects.forEach { drawEffect(batch, it) }
-        drawMonsterEffects(batch, snapshot, dungeon)
-        popups.forEach { drawPopup(batch, it) }
-        drawStatusIcons(batch, snapshot)
-        if (!snapshot.finished && snapshot.abilityCastRemaining > 0f && dungeon.mechanic != DungeonMechanic.REGEN) {
-            for (i in 0 until 10) {
-                val tint = Color(danger).also { it.a = (1f - i / 10f) * (0.12f + abs(sin(clock * 5f)) * 0.1f) }
-                rect(batch, i * 5f, 175f, 5f, 395f, tint)
-                rect(batch, 1275f - i * 5f, 175f, 5f, 395f, tint)
-            }
-        }
-        if (clock < 1.8f && !snapshot.finished) {
-            val alpha = ((1.8f - clock) / 0.5f).coerceIn(0f, 1f)
-            rect(batch, 420f, 440f, 440f, 58f, Color(0.02f, 0.03f, 0.06f, alpha * 0.8f))
-            Ui.text(assets, batch, "RAID ENGAGE", 530f, 479f, 1.4f, Color(gold).also { it.a = alpha })
-        }
-        if (snapshot.finished && snapshot.victory) drawVictoryBurst(batch)
-        batch.color = Color.WHITE
     }
 
+    /** 공격 전진·피격 반동·호흡을 합성하고 발 기준 회전으로 캐릭터 위치를 유지한다. */
+    private fun drawMember(batch: SpriteBatch, member: BattleSimulator.MemberSnapshot, finished: Boolean) {
+        val id = member.character.id
+        val actionAge = effects.filter { it.cue.source == id }
+            .minOfOrNull { it.age }
+        val hitAge = effects.filter { it.cue.target == id && it.cue.type == CueType.HIT }
+            .minOfOrNull { it.age }
+        val alive = member.hp > 0f
+        val acting = alive && actionAge != null && actionAge < 0.28f
+        val hurt = alive && hitAge != null && hitAge < 0.24f
+        val melee = member.character.attackStyle == AttackStyle.MELEE
+        val facing = if (BattleProjection.facingX(member.facingX, member.facingY) < 0f) -1f else 1f
+        val advance = if (acting && !hurt && melee) sin(actionAge!! / 0.28f * MathUtils.PI) * 8f else 0f
+        val recoil = if (hurt) sin(hitAge!! / 0.24f * MathUtils.PI) * -4f else 0f
+        val px = x(id) + (advance + recoil) * facing
+        val running = id in moving && alive && !acting && !hurt
+        val py = y(id) + 37f + if (running) kotlin.math.abs(sin(clock * 18f + id.hashCode())) * 3f else 0f
+        val tint = color(member.character.role)
+        disc(batch, px, py - 37f, 32f, Color.BLACK, 0.4f, 0.28f)
+        if (running) {
+            for (i in 1..3) disc(batch, px - i * 10f, y(id), 5f - i, tint, 0.2f, 0.5f)
+        }
+        val frame = assets.animatedFrame(id,
+            SpriteTimeline.frame(clock + id.length * 0.13f, running, actionAge, hitAge, alive, finished))
+        // Keep subtle foot-anchored motion on top of the authored frame animation.
+        val breath = if (alive && !acting && !hurt && !finished) sin(clock * 3f + y(id)) * 0.018f else 0f
+        val castLean = if (acting && !melee && !hurt) sin(actionAge!! / 0.28f * MathUtils.PI) * -5f else 0f
+        batch.setColor(1f, if (hurt) 0.6f else 1f, if (hurt) 0.6f else 1f, if (alive) 1f else 0.45f)
+        val previousShader = batch.shader
+        batch.shader = assets.heroShader
+        val scale = 86f / frame.region.regionHeight
+        val footX = frame.footX * scale
+        val footY = frame.footY * scale
+        batch.draw(frame.region, px - footX, py - 37f - footY, footX, footY,
+            frame.region.regionWidth * scale, frame.region.regionHeight * scale,
+            facing, 1f + breath, (if (!alive) 80f else if (running) -6f else castLean) * facing)
+        batch.shader = previousShader
+        batch.color = Color.WHITE
+        if (alive && member.shield > 0f) {
+            drawPersistentShield(batch, px, py, member.shield, hitAge)
+        }
+        if (!alive) Ui.text(assets, batch, "DOWN", px - 22f, py + 14f, 0.7f, red)
+        Ui.text(assets, batch, member.character.name, px - 28f, py + 38f, 0.5f, tint)
+        Ui.bar(assets, batch, px - 46f, py - 53f, 92f, 5f, member.hp / member.character.maxHp, green)
+    }
+
+    private fun drawEnemy(
+        batch: SpriteBatch, enemy: BattleSimulator.EnemySnapshot, dungeon: DungeonDefinition, finished: Boolean,
+    ) {
+        val motion = monsterAnimations[enemy.id]?.motion(dungeon.mechanic) ?: MonsterAnimation.Motion(GameAssets.SpritePose.IDLE)
+        val actionAge = effects.filter { it.cue.source == enemy.id }.minOfOrNull { it.age }
+        val hitAge = effects.filter { it.cue.target == enemy.id && it.cue.type == CueType.HIT }
+            .minOfOrNull { it.age }
+        val monster = assets.animatedFrame(dungeon.id,
+            SpriteTimeline.frame(clock, enemy.id in moving, actionAge, hitAge, enemy.hp > 0f, finished))
+        val scale = (if (dungeon.mechanic == DungeonMechanic.REGEN) 112f else 145f) / monster.region.regionHeight
+        val px = x(enemy.id)
+        val groundY = y(enemy.id)
+        val footX = monster.footX * scale
+        val footY = monster.footY * scale
+        val facing = if (BattleProjection.facingX(enemy.facingX, enemy.facingY) > 0f) -1f else 1f
+        disc(batch, px, groundY, 65f, Color.BLACK, 0.5f, 0.22f)
+        val previousShader = batch.shader
+        batch.shader = assets.monsterShader
+        batch.setColor(1f, if (motion.hurt) 0.62f else 1f, if (motion.hurt) 0.62f else 1f, motion.alpha)
+        batch.draw(monster.region, px + motion.offsetX * facing - footX, groundY - footY, footX, footY,
+            monster.region.regionWidth * scale, monster.region.regionHeight * scale,
+            motion.scaleX * facing, motion.scaleY, motion.rotation * facing)
+        batch.shader = previousShader
+        batch.color = Color.WHITE
+        Ui.bar(assets, batch, px - 48f, groundY - 16f, 96f, 6f, enemy.hp / enemy.maxHp, red)
+        Ui.text(assets, batch, "#${enemyIndex(enemy.id) + 1}  ${enemy.hp.toInt()} HP", px - 48f, groundY - 23f, 0.55f)
+    }
+
+    /** 보호막 양과 피격 경과 시간을 정규화해 크기와 불투명도에 호흡 진동을 더한다. */
     private fun drawPersistentShield(batch: SpriteBatch, px: Float, py: Float, amount: Float, hitAge: Float?) {
         val pulse = sin(clock * 2.8f + px * 0.01f)
         val strength = (amount / 30f).coerceIn(0f, 1f)
@@ -339,8 +361,9 @@ internal class BattleStage(private val assets: GameAssets, private val formation
         }
     }
 
+    /** 표시 시간을 정규화하고 이차 감속 곡선으로 숫자를 상승시키며 끝부분을 흐리게 한다. */
     private fun drawPopup(batch: SpriteBatch, popup: Popup) {
-        val progress = (popup.age / 1.4f).coerceIn(0f, 1f)
+        val progress = (popup.age / Style.POPUP_LIFETIME).coerceIn(0f, 1f)
         val alpha = ((1f - progress) / 0.35f).coerceIn(0f, 1f)
         val scale = (if (popup.emphasis) 1.05f else 0.85f) + 0.25f * (1f - popup.age / 0.16f).coerceIn(0f, 1f)
         val px = popup.x.coerceIn(50f, 1100f)
@@ -349,13 +372,14 @@ internal class BattleStage(private val assets: GameAssets, private val formation
         Ui.text(assets, batch, popup.text, px, py, scale, Color(popup.color).also { it.a = alpha })
     }
 
+    /** 원주를 등분한 각도에 입자를 배치하고 시간에 따라 반지름을 늘린다. */
     private fun drawVictoryBurst(batch: SpriteBatch) {
-        if (resultAge > 2.5f) return
+        if (resultAge > Style.VICTORY_DURATION) return
         for (i in 0 until 18) {
             val angle = i * MathUtils.PI2 / 18f
             val radius = 50f + resultAge * 140f
             disc(batch, 640f + MathUtils.cos(angle) * radius, 390f + MathUtils.sin(angle) * radius,
-                5f, gold, (1f - resultAge / 2.5f).coerceIn(0f, 1f))
+                5f, gold, (1f - resultAge / Style.VICTORY_DURATION).coerceIn(0f, 1f))
         }
     }
 
@@ -376,7 +400,7 @@ internal class BattleStage(private val assets: GameAssets, private val formation
         effects.filter { isEnemy(it.cue.source) }.forEach { effect ->
             val px = x(effect.cue.source)
             val py = y(effect.cue.source)
-            val progress = (effect.age / 1.15f).coerceIn(0f, 1f)
+            val progress = (effect.age / Style.EFFECT_LIFETIME).coerceIn(0f, 1f)
             val alpha = (1f - progress) * 0.9f
             when (effect.cue.type) {
                 CueType.WAVE -> {
@@ -406,7 +430,7 @@ internal class BattleStage(private val assets: GameAssets, private val formation
     private fun drawEffect(batch: SpriteBatch, effect: Effect) {
         val cue = effect.cue
         val age = effect.age
-        val alpha = (1f - age / 1.15f).coerceIn(0f, 1f)
+        val alpha = (1f - age / Style.EFFECT_LIFETIME).coerceIn(0f, 1f)
         val tx = x(cue.target)
         val ty = y(cue.target) + 20f
         val skill = cue.skillType
@@ -478,7 +502,7 @@ internal class BattleStage(private val assets: GameAssets, private val formation
         val skill = cue.skillType ?: return
         // SUNDER emits both a status cue and damage cue; render its sprite only once.
         if (skill == com.raidmanager.game.model.SkillType.SUNDER && cue.type == CueType.HIT) return
-        val progress = (age / 1.15f).coerceIn(0f, 1f)
+        val progress = (age / Style.EFFECT_LIFETIME).coerceIn(0f, 1f)
         val size = when (skill) {
             com.raidmanager.game.model.SkillType.GUARD -> 160f + progress * 25f
             com.raidmanager.game.model.SkillType.HEAL -> 150f
@@ -514,7 +538,7 @@ internal class BattleStage(private val assets: GameAssets, private val formation
         drawRangedAttack(batch, cue, age, tx, ty)
     }
 
-    /** Reuses the authored elemental sprites for launch, flight, and impact. */
+    /** 직선 보간에 사인 높이를 더해 포물선 형태의 궤적을 만들고 잔상과 충돌 확산을 순서대로 그린다. */
     private fun drawRangedAttack(batch: SpriteBatch, cue: CombatCue, age: Float, tx: Float, ty: Float) {
         val character = formation.members.firstOrNull { it.id == cue.source } ?: return
         val tint = when (character.id) {
@@ -525,7 +549,7 @@ internal class BattleStage(private val assets: GameAssets, private val formation
         }
         val sx = x(cue.source)
         val sy = y(cue.source) + 35f
-        val flight = 0.3f
+        val flight = Style.PROJECTILE_FLIGHT
         val arc = if (character.id == "ember") 34f else 16f
         val heading = MathUtils.atan2(ty - sy, tx - sx) * MathUtils.radiansToDegrees
         val oldSrc = batch.blendSrcFunc
@@ -572,6 +596,7 @@ internal class BattleStage(private val assets: GameAssets, private val formation
         line(batch, x - dx, y - dy, x + dx, y + dy, color, 5f, alpha)
     }
 
+    /** 시작점과 끝점을 네 구간으로 나누고 중간 점에 교대 오프셋을 주어 번개를 만든다. */
     private fun lightning(batch: SpriteBatch, x: Float, y: Float, tx: Float, ty: Float, color: Color, alpha: Float) {
         val dx = (tx - x) / 4f
         val dy = (ty - y) / 4f
@@ -598,6 +623,7 @@ internal class BattleStage(private val assets: GameAssets, private val formation
         batch.color = Color.WHITE
     }
 
+    /** 두 점의 거리와 atan2 회전각으로 단색 텍스처를 선분에 맞춰 그린다. */
     private fun line(batch: SpriteBatch, x: Float, y: Float, tx: Float, ty: Float, color: Color,
                      thickness: Float = 2f, alpha: Float = 1f) {
         val dx = tx - x
@@ -609,10 +635,11 @@ internal class BattleStage(private val assets: GameAssets, private val formation
         batch.color = Color.WHITE
     }
 
+    /** 원을 일정 각도로 나눈 뒤 인접한 원주 좌표를 연결하여 테두리를 그린다. */
     private fun ring(batch: SpriteBatch, x: Float, y: Float, r: Float, color: Color, alpha: Float) {
-        for (i in 0 until 48) {
-            val a = i * MathUtils.PI2 / 48f
-            val b = (i + 1) * MathUtils.PI2 / 48f
+        for (i in 0 until Style.RING_SEGMENTS) {
+            val a = i * MathUtils.PI2 / Style.RING_SEGMENTS
+            val b = (i + 1) * MathUtils.PI2 / Style.RING_SEGMENTS
             line(batch, x + MathUtils.cos(a) * r, y + MathUtils.sin(a) * r,
                 x + MathUtils.cos(b) * r, y + MathUtils.sin(b) * r, color, 2f, alpha)
         }

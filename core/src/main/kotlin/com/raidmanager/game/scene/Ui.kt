@@ -1,10 +1,23 @@
 package com.raidmanager.game.scene
 
+import com.raidmanager.game.scene.SceneStyle.Ui as Style
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.raidmanager.game.GameAssets
 
 internal object Ui {
+    /** 이미지 종횡비를 유지하는 최소 배율로 화면 안에 맞추고 양축 중앙에 배치한다. */
+    fun titleBackground(assets: GameAssets, batch: SpriteBatch, screenWidth: Int, screenHeight: Int) {
+        val scale = minOf(
+            screenWidth.toFloat() / assets.titleImage.width,
+            screenHeight.toFloat() / assets.titleImage.height,
+        )
+        val width = assets.titleImage.width * scale
+        val height = assets.titleImage.height * scale
+        batch.color = Color.WHITE
+        batch.draw(assets.titleImage, (screenWidth - width) / 2f, (screenHeight - height) / 2f, width, height)
+    }
+
     fun text(
         assets: GameAssets,
         batch: SpriteBatch,
@@ -31,15 +44,15 @@ internal object Ui {
         enabled: Boolean = true,
     ) {
         val color = when {
-            !enabled -> Color(0.14f, 0.15f, 0.18f, 0.9f)
-            selected -> Color(0.18f, 0.46f, 0.66f, 0.96f)
-            else -> Color(0.13f, 0.18f, 0.27f, 0.96f)
+            !enabled -> Style.DISABLED_COLOR
+            selected -> Style.SELECTED_COLOR
+            else -> Style.BUTTON_COLOR
         }
         batch.color = color
         batch.draw(assets.buttonTexture, x, y, width, height)
         batch.color = Color.WHITE
 
-        assets.font.data.setScale(0.86f)
+        assets.font.data.setScale(Style.BUTTON_TEXT_SCALE)
         assets.textLayout.setText(assets.font, label)
         val textColor = if (enabled) Color.WHITE else Color.GRAY
         text(
@@ -47,8 +60,8 @@ internal object Ui {
             batch,
             label,
             x + (width - assets.textLayout.width) / 2f,
-            y + height / 2f + 8f,
-            0.86f,
+            y + height / 2f + Style.BUTTON_TEXT_OFFSET,
+            Style.BUTTON_TEXT_SCALE,
             textColor,
         )
     }
@@ -63,7 +76,7 @@ internal object Ui {
         ratio: Float,
         fill: Color,
     ) {
-        batch.color = Color(0.14f, 0.15f, 0.18f, 1f)
+        batch.color = Style.BAR_BACKGROUND
         batch.draw(assets.buttonTexture, x, y, width, height)
         batch.color = fill
         batch.draw(assets.buttonTexture, x, y, width * ratio.coerceIn(0f, 1f), height)

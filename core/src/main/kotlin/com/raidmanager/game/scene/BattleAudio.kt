@@ -5,7 +5,7 @@ import com.raidmanager.game.model.AttackStyle
 import com.raidmanager.game.model.BattleSimulator
 import com.raidmanager.game.model.RaidFormation
 
-/** Scene-local playback limits; sound resources belong to GameAssets. */
+/** 전투 이벤트를 효과음으로 변환하고 중복 재생을 제한한다. 리소스 수명은 GameAssets가 관리한다. */
 internal class BattleAudio(private val assets: GameAssets, private val formation: RaidFormation) {
     private val cooldowns = mutableMapOf<String, Float>()
     private var started = false
@@ -14,18 +14,18 @@ internal class BattleAudio(private val assets: GameAssets, private val formation
     fun update(delta: Float, cues: List<BattleSimulator.CombatCue>, snapshot: BattleSimulator.Snapshot) {
         cooldowns.replaceAll { _, value -> (value - delta).coerceAtLeast(0f) }
         if (!started) {
-            play("start", 0.25f)
+            play("start", BattleSoundStyle.START_VOLUME)
             started = true
         }
         if (snapshot.finished) {
             if (!ended) {
                 assets.stopBattleSounds()
-                play(if (snapshot.victory) "victory" else "defeat", 0.35f)
+                play(if (snapshot.victory) "victory" else "defeat", BattleSoundStyle.RESULT_VOLUME)
                 ended = true
             }
             return
         }
-        // At most three different sounds per update; group-wide shield/heal cues play once.
+        // 광역 회복·보호막 이벤트의 중복음을 제거한 뒤 기술음을 우선 재생한다.
         val sounds = cues.map { cue ->
             when (cue.type) {
                 BattleSimulator.CueType.HEAL -> "heal"
@@ -40,13 +40,13 @@ internal class BattleAudio(private val assets: GameAssets, private val formation
                     else -> "hit"
                 }
             }
-        }.distinct().sortedBy { if (it == "hit" || it == "shot") 1 else 0 }.take(3)
-        sounds.forEach { play(it, if (it == "hit" || it == "shot") 0.16f else 0.25f) }
+        }.distinct().sortedBy { if (it == "hit" || it == "shot") 1 else 0 }.take(BattleSoundStyle.MAX_SOUNDS_PER_UPDATE)
+        sounds.forEach { play(it, if (it == "hit" || it == "shot") BattleSoundStyle.BASIC_VOLUME else BattleSoundStyle.SKILL_VOLUME) }
     }
 
     private fun play(name: String, volume: Float) {
         if ((cooldowns[name] ?: 0f) > 0f) return
         assets.playBattleSound(name, volume)
-        cooldowns[name] = if (name == "hit" || name == "shot") 0.12f else 0.3f
+        cooldowns[name] = if (name == "hit" || name == "shot") BattleSoundStyle.BASIC_COOLDOWN else BattleSoundStyle.SKILL_COOLDOWN
     }
 }

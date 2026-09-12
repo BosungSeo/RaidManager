@@ -1,5 +1,6 @@
 package com.raidmanager.game.scene
 
+import com.raidmanager.game.scene.SceneStyle.MainMenu as Style
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
 import com.badlogic.gdx.InputAdapter
@@ -12,8 +13,8 @@ class MainMenuScene(private val assets: GameAssets, private val onNewGame: () ->
     private val pendingCommands = ArrayDeque<MenuCommand>()
     private var message: String? = null
 
-    private val buttonWidth = 280f
-    private val buttonHeight = 64f
+    private val buttonWidth = Style.BUTTON_WIDTH
+    private val buttonHeight = Style.BUTTON_HEIGHT
 
     override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
         // 입력 좌표는 좌측 상단 기준이므로 렌더링 좌표처럼 좌측 하단 기준으로 변환한다.
@@ -60,27 +61,17 @@ class MainMenuScene(private val assets: GameAssets, private val onNewGame: () ->
 
         message?.let {
             assets.font.color = Color.LIGHT_GRAY
-            assets.font.data.setScale(0.85f)
-            assets.font.draw(batch, it, x, buttonY(1) - 24f)
+            assets.font.data.setScale(Style.MESSAGE_SCALE)
+            assets.font.draw(batch, it, x, buttonY(1) - Style.MESSAGE_OFFSET)
         }
     }
 
-    private fun drawTitleImage(batch: SpriteBatch) {
-        val scale = minOf(
-            Gdx.graphics.width.toFloat() / assets.titleImage.width,
-            Gdx.graphics.height.toFloat() / assets.titleImage.height,
-        )
-        val width = assets.titleImage.width * scale
-        val height = assets.titleImage.height * scale
-        val x = (Gdx.graphics.width - width) / 2f
-        val y = (Gdx.graphics.height - height) / 2f
+    private fun drawTitleImage(batch: SpriteBatch) =
+        Ui.titleBackground(assets, batch, Gdx.graphics.width, Gdx.graphics.height)
 
-        batch.setColor(1f, 1f, 1f, 1f)
-        batch.draw(assets.titleImage, x, y, width, height)
-    }
 
     private fun drawMenuButton(label: String, x: Float, y: Float, batch: SpriteBatch) {
-        batch.setColor(0.12f, 0.16f, 0.24f, 0.94f)
+        batch.color = Style.BUTTON_COLOR
         batch.draw(assets.buttonTexture, x, y, buttonWidth, buttonHeight)
         batch.setColor(1f, 1f, 1f, 1f)
 
@@ -91,7 +82,7 @@ class MainMenuScene(private val assets: GameAssets, private val onNewGame: () ->
             batch,
             label,
             x + (buttonWidth - assets.textLayout.width) / 2f,
-            y + buttonHeight / 2f + 10f,
+            y + buttonHeight / 2f + Style.TEXT_OFFSET,
         )
     }
 
@@ -101,10 +92,10 @@ class MainMenuScene(private val assets: GameAssets, private val onNewGame: () ->
         return x in buttonX..(buttonX + buttonWidth) && y in buttonY..(buttonY + buttonHeight)
     }
 
-    private fun menuX(): Float = Gdx.graphics.width * 0.08f
+    private fun menuX(): Float = Gdx.graphics.width * Style.X_RATIO
 
     private fun buttonY(index: Int): Float =
-        Gdx.graphics.height * 0.53f - index * (buttonHeight + 18f)
+        Gdx.graphics.height * Style.Y_RATIO - index * (buttonHeight + Style.BUTTON_GAP)
 
     private enum class MenuCommand {
         NEW_GAME,

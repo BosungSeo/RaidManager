@@ -3,11 +3,11 @@ package com.raidmanager.game.scene
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
 import com.badlogic.gdx.InputAdapter
-import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.raidmanager.game.GameAssets
 import com.raidmanager.game.model.CharacterDefinition
 import com.raidmanager.game.model.RaidFormation
+import com.raidmanager.game.model.RaidSetupState
 import java.util.ArrayDeque
 
 class RaidSetupScene(
@@ -19,51 +19,48 @@ class RaidSetupScene(
 ) : InputAdapter(), Scene {
     private sealed interface SetupCommand {
         data class Toggle(val index: Int) : SetupCommand
+        data class ShowStatus(val index: Int) : SetupCommand
         data class MonsterCount(val delta: Int) : SetupCommand
+        data object CloseStatus : SetupCommand
         data object Continue : SetupCommand
         data object Back : SetupCommand
     }
 
-    private val selectedIds = initialFormation?.members?.mapTo(mutableSetOf()) { it.id } ?: mutableSetOf()
-    private var monsterCount = initialFormation?.monsterCount ?: RaidFormation.MIN_MONSTER_COUNT
+    private val state = RaidSetupState(roster, initialFormation)
+    private val view = RaidSetupView(assets, roster)
     private val pendingCommands = ArrayDeque<SetupCommand>()
     private var message = "Select exactly ${RaidFormation.PARTY_SIZE} members"
+    private var statusIndex: Int? = null
 
     override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
-        roster.indices.firstOrNull { index ->
-            val bounds = cardBounds(index)
-            Ui.contains(screenX, screenY, bounds.x, bounds.y, bounds.width, bounds.height, Gdx.graphics.height)
-        }?.let {
-            pendingCommands.addLast(SetupCommand.Toggle(it))
+        if (statusIndex != null) {
+            if (contains(screenX, screenY, view.statusBounds())) {
+                pendingCommands.addLast(SetupCommand.CloseStatus)
+            }
             return true
         }
-
-        val continueBounds = continueBounds()
-        if (Ui.contains(
-                screenX,
-                screenY,
-                continueBounds.x,
-                continueBounds.y,
-                continueBounds.width,
-                continueBounds.height,
-                Gdx.graphics.height,
-            )
-        ) {
-            pendingCommands.addLast(SetupCommand.Continue)
-            return true
+        for (index in roster.indices) {
+            if (contains(screenX, screenY, view.statusButtonBounds(index))) {
+                pendingCommands.addLast(SetupCommand.ShowStatus(index))
+                return true
+            }
+            if (contains(screenX, screenY, view.cardBounds(index))) {
+                pendingCommands.addLast(SetupCommand.Toggle(index))
+                return true
+            }
         }
-        val minus = monsterCountBounds(-1)
-        val plus = monsterCountBounds(1)
-        if (Ui.contains(screenX, screenY, minus.x, minus.y, minus.width, minus.height, Gdx.graphics.height)) {
-            pendingCommands.addLast(SetupCommand.MonsterCount(-1))
-            return true
+        val command = when {
+            contains(screenX, screenY, view.continueBounds()) -> SetupCommand.Continue
+            contains(screenX, screenY, view.monsterCountBounds(-1)) -> SetupCommand.MonsterCount(-1)
+            contains(screenX, screenY, view.monsterCountBounds(1)) -> SetupCommand.MonsterCount(1)
+            else -> return false
         }
-        if (Ui.contains(screenX, screenY, plus.x, plus.y, plus.width, plus.height, Gdx.graphics.height)) {
-            pendingCommands.addLast(SetupCommand.MonsterCount(1))
-            return true
-        }
-        return false
+        pendingCommands.addLast(command)
+        return true
     }
+
+    private fun contains(screenX: Int, screenY: Int, bounds: Bounds): Boolean =
+        Ui.contains(screenX, screenY, bounds.x, bounds.y, bounds.width, bounds.height, Gdx.graphics.height)
 
     override fun keyDown(keycode: Int): Boolean {
         when (keycode) {
@@ -80,99 +77,34 @@ class RaidSetupScene(
                 SetupCommand.Back -> onBack()
                 SetupCommand.Continue -> continueToDungeon()
                 is SetupCommand.Toggle -> toggle(command.index)
+                is SetupCommand.ShowStatus -> statusIndex = command.index
+                SetupCommand.CloseStatus -> statusIndex = null
                 is SetupCommand.MonsterCount -> adjustMonsterCount(command.delta)
             }
         }
     }
 
-    override fun renderGame(batch: SpriteBatch) {
-        Ui.text(assets, batch, "BUILD YOUR RAID", margin(), Gdx.graphics.height - 42f, 1.35f)
-        Ui.text(assets, batch, message, margin(), Gdx.graphics.height - 74f, 0.78f, Color.LIGHT_GRAY)
-        Ui.text(assets, batch, "MONSTERS", margin(), 126f, 0.78f, Color.LIGHT_GRAY)
-        val minus = monsterCountBounds(-1)
-        val plus = monsterCountBounds(1)
-        Ui.button(assets, batch, "-", minus.x, minus.y, minus.width, minus.height, monsterCount > RaidFormation.MIN_MONSTER_COUNT)
-        Ui.text(assets, batch, "$monsterCount", margin() + 86f, 143f, 0.95f, Color.WHITE)
-        Ui.button(assets, batch, "+", plus.x, plus.y, plus.width, plus.height, monsterCount < RaidFormation.MAX_MONSTER_COUNT)
-
-        roster.forEachIndexed { index, character ->
-            val bounds = cardBounds(index)
-            val selected = character.id in selectedIds
-            Ui.button(assets, batch, "${character.name}  [${character.role}]", bounds.x, bounds.y, bounds.width, bounds.height, selected)
-            Ui.text(
-                assets,
-                batch,
-                "HP ${character.maxHp.toInt()}  ATK ${character.attackPower.toInt()}  ${character.skillName}",
-                bounds.x + 12f,
-                bounds.y + 16f,
-                0.63f,
-                Color.LIGHT_GRAY,
-            )
-        }
-
-        val bounds = continueBounds()
-        Ui.button(
-            assets,
-            batch,
-            "CHOOSE DUNGEON",
-            bounds.x,
-            bounds.y,
-            bounds.width,
-            bounds.height,
-            enabled = selectedIds.size == RaidFormation.PARTY_SIZE,
-        )
-        Ui.text(assets, batch, "ESC: MAIN MENU", margin(), 24f, 0.65f, Color.GRAY)
-    }
+    override fun renderGame(batch: SpriteBatch) = view.render(batch, state, message, statusIndex)
 
     private fun toggle(index: Int) {
-        val id = roster[index].id
-        if (!selectedIds.remove(id)) {
-            if (selectedIds.size >= RaidFormation.PARTY_SIZE) {
-                message = "Raid is full. Deselect one member first."
-                return
-            }
-            selectedIds += id
+        message = if (state.toggle(index)) {
+            "${state.selectedIds.size} / ${RaidFormation.PARTY_SIZE} selected"
+        } else {
+            "Raid is full. Deselect one member first."
         }
-        message = "${selectedIds.size} / ${RaidFormation.PARTY_SIZE} selected"
     }
 
     private fun continueToDungeon() {
-        val members = roster.filter { it.id in selectedIds }
-        if (members.size != RaidFormation.PARTY_SIZE) {
+        val formation = state.createFormation()
+        if (formation == null) {
             message = "Select exactly ${RaidFormation.PARTY_SIZE} members"
             return
         }
-        onContinue(RaidFormation(members, monsterCount))
+        onContinue(formation)
     }
 
     private fun adjustMonsterCount(delta: Int) {
-        monsterCount = (monsterCount + delta).coerceIn(RaidFormation.MIN_MONSTER_COUNT, RaidFormation.MAX_MONSTER_COUNT)
-        message = "${selectedIds.size} / ${RaidFormation.PARTY_SIZE} selected · $monsterCount monster(s)"
+        state.adjustMonsterCount(delta)
+        message = "${state.selectedIds.size} / ${RaidFormation.PARTY_SIZE} selected · ${state.monsterCount} monster(s)"
     }
-
-    private fun margin(): Float = Gdx.graphics.width * 0.07f
-
-    private fun cardBounds(index: Int): Bounds {
-        val gap = 12f
-        val width = (Gdx.graphics.width - margin() * 2f - gap) / 2f
-        val height = 74f
-        val column = index % 2
-        val row = index / 2
-        val x = margin() + column * (width + gap)
-        val y = Gdx.graphics.height - 170f - row * (height + gap)
-        return Bounds(x, y, width, height)
-    }
-
-    private fun continueBounds(): Bounds {
-        val width = 240f
-        return Bounds(Gdx.graphics.width - margin() - width, 44f, width, 58f)
-    }
-
-    private fun monsterCountBounds(delta: Int): Bounds {
-        val size = 42f
-        val x = if (delta < 0) margin() else margin() + 130f
-        return Bounds(x, 132f, size, 34f)
-    }
-
-    private data class Bounds(val x: Float, val y: Float, val width: Float, val height: Float)
 }

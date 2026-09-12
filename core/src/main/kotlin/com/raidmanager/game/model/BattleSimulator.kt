@@ -1,5 +1,68 @@
 package com.raidmanager.game.model
 
+import com.raidmanager.game.model.BattleRules.STEP
+import com.raidmanager.game.model.BattleRules.MAX_FRAME_DELTA
+import com.raidmanager.game.model.BattleRules.MAX_SHIELD
+import com.raidmanager.game.model.BattleRules.ABILITY_CAST_TIME
+import com.raidmanager.game.model.BattleRules.ENEMY_INTERVAL_OFFSET
+import com.raidmanager.game.model.BattleRules.ENEMY_OPENING_ATTACK
+import com.raidmanager.game.model.BattleRules.ENEMY_ATTACK_PHASE
+import com.raidmanager.game.model.BattleRules.ENEMY_MECHANIC_PHASE
+import com.raidmanager.game.model.BattleRules.ENEMY_START_X
+import com.raidmanager.game.model.BattleRules.ENEMY_START_Y
+import com.raidmanager.game.model.BattleRules.ENEMY_SPACING_X
+import com.raidmanager.game.model.BattleRules.ENEMY_SPACING_Y
+import com.raidmanager.game.model.BattleRules.INITIAL_SKILL_RATIO
+import com.raidmanager.game.model.BattleRules.PHASE_BUCKETS
+import com.raidmanager.game.model.BattleRules.PHASE_DIVISOR
+import com.raidmanager.game.model.BattleRules.OPENING_TIMER_RATIO
+import com.raidmanager.game.model.BattleRules.ATTACK_PHASE_RATIO
+import com.raidmanager.game.model.BattleRules.SKILL_PHASE_RATIO
+import com.raidmanager.game.model.BattleRules.MELEE_START_X
+import com.raidmanager.game.model.BattleRules.RANGED_START_X
+import com.raidmanager.game.model.BattleRules.MEMBER_START_Y
+import com.raidmanager.game.model.BattleRules.MEMBER_SPACING_Y
+import com.raidmanager.game.model.BattleRules.TAUNT_INTERVAL
+import com.raidmanager.game.model.BattleRules.INITIAL_THREAT
+import com.raidmanager.game.model.BattleRules.TIMER_EPSILON
+import com.raidmanager.game.model.BattleRules.ENEMY_ATTACK_RANGE
+import com.raidmanager.game.model.BattleRules.GUARD_SHIELD
+import com.raidmanager.game.model.BattleRules.HEAL_AMOUNT
+import com.raidmanager.game.model.BattleRules.HEAL_THREAT_MULTIPLIER
+import com.raidmanager.game.model.BattleRules.STRIKE_DAMAGE
+import com.raidmanager.game.model.BattleRules.CLEAVE_SWARM_DAMAGE
+import com.raidmanager.game.model.BattleRules.CLEAVE_DAMAGE
+import com.raidmanager.game.model.BattleRules.INTERRUPT_DAMAGE
+import com.raidmanager.game.model.BattleRules.SUNDER_DURATION
+import com.raidmanager.game.model.BattleRules.SUNDER_DAMAGE
+import com.raidmanager.game.model.BattleRules.DIRECTION_EPSILON
+import com.raidmanager.game.model.BattleRules.FLANK_RADIUS
+import com.raidmanager.game.model.BattleRules.FLANK_ANGLE_STEP
+import com.raidmanager.game.model.BattleRules.MIN_X
+import com.raidmanager.game.model.BattleRules.MAX_X
+import com.raidmanager.game.model.BattleRules.MIN_Y
+import com.raidmanager.game.model.BattleRules.MAX_Y
+import com.raidmanager.game.model.BattleRules.FLANK_STOP_DISTANCE
+import com.raidmanager.game.model.BattleRules.RETREAT_END_RANGE
+import com.raidmanager.game.model.BattleRules.RETREAT_START_RANGE
+import com.raidmanager.game.model.BattleRules.APPROACH_MARGIN
+import com.raidmanager.game.model.BattleRules.APPROACH_STOP_MARGIN
+import com.raidmanager.game.model.BattleRules.MIN_MOVEMENT_DISTANCE
+import com.raidmanager.game.model.BattleRules.ENEMY_STOP_RANGE
+import com.raidmanager.game.model.BattleRules.ENEMY_MIN_X
+import com.raidmanager.game.model.BattleRules.MEMBER_RADIUS
+import com.raidmanager.game.model.BattleRules.ENEMY_RADIUS
+import com.raidmanager.game.model.BattleRules.SEPARATION_ITERATIONS
+import com.raidmanager.game.model.BattleRules.SEPARATION_PADDING
+import com.raidmanager.game.model.BattleRules.SEPARATION_SHARE
+import com.raidmanager.game.model.BattleRules.SPACING_INTENT_THRESHOLD
+import com.raidmanager.game.model.BattleRules.TANK_DAMAGE_MULTIPLIER
+import com.raidmanager.game.model.BattleRules.BURST_DAMAGE
+import com.raidmanager.game.model.BattleRules.SWARM_DAMAGE
+import com.raidmanager.game.model.BattleRules.REDUCED_REGEN
+import com.raidmanager.game.model.BattleRules.REGEN_AMOUNT
+import com.raidmanager.game.model.BattleRules.PROTECTOR_THREAT_MULTIPLIER
+import com.raidmanager.game.model.BattleRules.PERCENT_SCALE
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -68,17 +131,17 @@ class BattleSimulator(
     private class EnemyState(val index: Int, dungeon: DungeonDefinition) {
         val id = if (index == 0) "boss" else "boss-$index"
         var hp = dungeon.enemyMaxHp
-        val attackInterval = dungeon.enemyAttackInterval * (1f + index * 0.09f)
-        var attackTimer = dungeon.enemyAttackInterval * (0.65f + index * 0.32f)
-        var mechanicTimer = dungeon.mechanicInterval + index * 1.65f
+        val attackInterval = dungeon.enemyAttackInterval * (1f + index * ENEMY_INTERVAL_OFFSET)
+        var attackTimer = dungeon.enemyAttackInterval * (ENEMY_OPENING_ATTACK + index * ENEMY_ATTACK_PHASE)
+        var mechanicTimer = dungeon.mechanicInterval + index * ENEMY_MECHANIC_PHASE
         var castRemaining = 0f
         var sunderTime = 0f
         var facingX = -1f
         var facingY = 0f
         val threat = mutableMapOf<String, Float>()
         var tieTargetId: String? = null
-        var x = 900f + index * 100f
-        var y = 440f - index * 80f
+        var x = ENEMY_START_X + index * ENEMY_SPACING_X
+        var y = ENEMY_START_Y - index * ENEMY_SPACING_Y
     }
 
     private data class MemberState(
@@ -86,7 +149,7 @@ class BattleSimulator(
         var hp: Float = character.maxHp,
         var shield: Float = 0f,
         var attackTimer: Float = character.attackInterval,
-        var skillTimer: Float = character.skillCooldown * 0.55f,
+        var skillTimer: Float = character.skillCooldown * INITIAL_SKILL_RATIO,
         var damageDealt: Float = 0f,
         var healingDone: Float = 0f,
         var damageTaken: Float = 0f,
@@ -99,11 +162,13 @@ class BattleSimulator(
     )
 
     private val members = formation.members.mapIndexed { index, character ->
-        // Stable identity-based offsets preserve reproducible battles while avoiding a synchronized opening.
-        val phase = (character.id.hashCode() and Int.MAX_VALUE) % 11 / 10f
-        MemberState(character, attackTimer = character.attackInterval * (0.45f + phase * 0.5f),
-            skillTimer = character.skillCooldown * (0.45f + phase * 0.25f),
-            x = if (character.attackStyle == AttackStyle.MELEE) 430f else 300f, y = 570f - index * 180f)
+        // 식별자 해시로 시작 시점을 분산하여 전투 재현성을 유지하면서 동시 행동을 줄인다.
+        val phase = (character.id.hashCode() and Int.MAX_VALUE) % PHASE_BUCKETS / PHASE_DIVISOR
+        MemberState(character, attackTimer = character.attackInterval * (OPENING_TIMER_RATIO + phase * ATTACK_PHASE_RATIO),
+            skillTimer = character.skillCooldown * (OPENING_TIMER_RATIO + phase * SKILL_PHASE_RATIO),
+            x = if (character.attackStyle == AttackStyle.MELEE) MELEE_START_X else RANGED_START_X,
+            y = MEMBER_START_Y - index * MEMBER_SPACING_Y,
+        )
     }
     private val enemies = List(formation.monsterCount) { EnemyState(it, dungeon) }
     private val events = mutableListOf<BattleEvent>()
@@ -111,19 +176,20 @@ class BattleSimulator(
     private var elapsedTime = 0f
     private val enemyHp: Float get() = enemies.sumOf { it.hp.toDouble() }.toFloat()
     private var interruptReady = false
-    private var tauntTimer = 3f
+    private var tauntTimer = TAUNT_INTERVAL
     private var finished = false
     private var victory = false
 
     init {
-        enemies.forEach { enemy -> members.forEach { enemy.threat[it.character.id] = 10f } }
+        enemies.forEach { enemy -> members.forEach { enemy.threat[it.character.id] = INITIAL_THREAT } }
         log("Battle started against ${dungeon.enemyName}")
     }
 
+    /** 프레임 시간을 고정 간격으로 누적·소비하여 렌더링 빈도와 전투 속도를 분리한다. */
     fun update(delta: Float) {
         if (finished) return
 
-        accumulator += delta.coerceAtMost(0.1f)
+        accumulator += delta.coerceAtMost(MAX_FRAME_DELTA)
         while (accumulator >= STEP && !finished) {
             simulateStep(STEP)
             accumulator -= STEP
@@ -149,7 +215,7 @@ class BattleSimulator(
             EnemySnapshot(enemy.id, enemy.hp, dungeon.enemyMaxHp, enemy.castRemaining,
                 members.associate { member ->
                     member.character.id to if (member.hp > 0f && total > 0f) {
-                        enemy.threat.getValue(member.character.id) / total * 100f
+                        enemy.threat.getValue(member.character.id) / total * PERCENT_SCALE
                     } else 0f
                 }, if (enemy.hp > 0f) threatTarget(enemy)?.character?.id else null, enemy.x, enemy.y,
                 enemy.sunderTime, enemy.facingX, enemy.facingY)
@@ -170,7 +236,10 @@ class BattleSimulator(
                 survived = it.hp > 0f,
             )
         }
-        return BattleResult(victory, elapsedTime, enemyHp, memberResults, events.toList(), analyze(memberResults))
+        return BattleResult(
+            victory, elapsedTime, enemyHp, memberResults, events.toList(),
+            BattleAnalysis.summarize(victory, dungeon, memberResults),
+        )
     }
 
     private fun simulateStep(delta: Float) {
@@ -180,6 +249,29 @@ class BattleSimulator(
         moveCombatants(delta)
         updateFacing()
 
+        updateMembers(delta)
+
+        if (enemyHp <= 0f) {
+            finish(true, "${dungeon.enemyName} defeated")
+            return
+        }
+
+        tauntTimer -= delta
+        if (tauntTimer <= TIMER_EPSILON) {
+            useThreatSwap()
+            tauntTimer += TAUNT_INTERVAL
+        }
+
+        updateEnemies(delta)
+
+        if (members.none { it.hp > 0f }) {
+            finish(false, "Raid wiped out")
+        } else if (elapsedTime >= dungeon.timeLimit) {
+            finish(false, "Time limit reached")
+        }
+    }
+
+    private fun updateMembers(delta: Float) {
         members.filter { it.hp > 0f }.forEach { member ->
             member.attackTimer = max(0f, member.attackTimer - delta)
             member.skillTimer = max(0f, member.skillTimer - delta)
@@ -195,18 +287,9 @@ class BattleSimulator(
                 member.skillTimer += member.character.skillCooldown
             }
         }
+    }
 
-        if (enemyHp <= 0f) {
-            finish(true, "${dungeon.enemyName} defeated")
-            return
-        }
-
-        tauntTimer -= delta
-        if (tauntTimer <= 0.0001f) {
-            useThreatSwap()
-            tauntTimer += 3f
-        }
-
+    private fun updateEnemies(delta: Float) {
         enemies.filter { it.hp > 0f }.forEach { enemy ->
             if (enemy.castRemaining > 0f) {
                 enemy.castRemaining = max(0f, enemy.castRemaining - delta)
@@ -221,7 +304,7 @@ class BattleSimulator(
             } else {
                 enemy.attackTimer = max(0f, enemy.attackTimer - delta)
                 val target = threatTarget(enemy)
-                if (enemy.attackTimer <= 0f && target != null && distance(enemy.x, enemy.y, target.x, target.y) <= 155f) {
+                if (enemy.attackTimer <= 0f && target != null && distance(enemy.x, enemy.y, target.x, target.y) <= ENEMY_ATTACK_RANGE) {
                     enemyAttack(enemy)
                     enemy.attackTimer += enemy.attackInterval
                 }
@@ -233,12 +316,6 @@ class BattleSimulator(
                 }
             }
         }
-
-        if (members.none { it.hp > 0f }) {
-            finish(false, "Raid wiped out")
-        } else if (elapsedTime >= dungeon.timeLimit) {
-            finish(false, "Time limit reached")
-        }
     }
 
     private fun useSkill(member: MemberState) {
@@ -246,7 +323,7 @@ class BattleSimulator(
         when (member.character.skillType) {
             SkillType.GUARD -> {
                 members.filter { it.hp > 0f }.forEach {
-                    it.shield = min(MAX_SHIELD, it.shield + 13f)
+                    it.shield = min(MAX_SHIELD, it.shield + GUARD_SHIELD)
                     cues += CombatCue(CueType.SHIELD, member.character.id, it.character.id, skillType = SkillType.GUARD)
                 }
                 log("${member.character.name} used ${member.character.skillName}: party shielded")
@@ -254,12 +331,12 @@ class BattleSimulator(
 
             SkillType.HEAL -> {
                 val target = members.filter { it.hp > 0f }.minByOrNull { it.hp / it.character.maxHp } ?: return
-                val healed = min(30f, target.character.maxHp - target.hp)
+                val healed = min(HEAL_AMOUNT, target.character.maxHp - target.hp)
                 target.hp += healed
                 member.healingDone += healed
                 if (healed > 0f) {
                     enemies.filter { it.hp > 0f }.forEach { enemy ->
-                        enemy.threat[member.character.id] = enemy.threat.getValue(member.character.id) + healed * 3f
+                        enemy.threat[member.character.id] = enemy.threat.getValue(member.character.id) + healed * HEAL_THREAT_MULTIPLIER
                     }
                     cues += CombatCue(CueType.HEAL, member.character.id, target.character.id, healed, SkillType.HEAL)
                 }
@@ -267,27 +344,27 @@ class BattleSimulator(
             }
 
             SkillType.STRIKE -> {
-                damageEnemy(member, 32f, SkillType.STRIKE)
-                log("${member.character.name} used ${member.character.skillName} for 32")
+                damageEnemy(member, STRIKE_DAMAGE, SkillType.STRIKE)
+                log("${member.character.name} used ${member.character.skillName} for ${STRIKE_DAMAGE.toInt()}")
             }
 
             SkillType.CLEAVE -> {
-                val damage = if (dungeon.mechanic == DungeonMechanic.SWARM) 50f else 22f
+                val damage = if (dungeon.mechanic == DungeonMechanic.SWARM) CLEAVE_SWARM_DAMAGE else CLEAVE_DAMAGE
                 enemies.filter { it.hp > 0f }.forEach { damageEnemy(member, damage, SkillType.CLEAVE, it) }
                 log("${member.character.name} used ${member.character.skillName} for ${damage.toInt()}")
             }
 
             SkillType.INTERRUPT -> {
                 interruptReady = true
-                damageEnemy(member, 10f, SkillType.INTERRUPT)
+                damageEnemy(member, INTERRUPT_DAMAGE, SkillType.INTERRUPT)
                 log("${member.character.name} prepared an interrupt")
             }
 
             SkillType.SUNDER -> {
                 val target = attackTarget(member) ?: return
-                target.sunderTime = 6f
+                target.sunderTime = SUNDER_DURATION
                 cues += CombatCue(CueType.SUNDER, member.character.id, target.id, skillType = SkillType.SUNDER)
-                damageEnemy(member, 16f, SkillType.SUNDER, target)
+                damageEnemy(member, SUNDER_DAMAGE, SkillType.SUNDER, target)
                 log("${member.character.name} applied healing reduction")
             }
         }
@@ -303,7 +380,7 @@ class BattleSimulator(
         members.filter { it.hp > 0f }.forEach { member ->
             val target = attackTarget(member) ?: return@forEach
             val length = distance(member.x, member.y, target.x, target.y)
-            if (length > 0.001f) {
+            if (length > DIRECTION_EPSILON) {
                 member.facingX = (target.x - member.x) / length
                 member.facingY = (target.y - member.y) / length
             }
@@ -311,32 +388,34 @@ class BattleSimulator(
         enemies.filter { it.hp > 0f }.forEach { enemy ->
             val target = threatTarget(enemy) ?: return@forEach
             val length = distance(enemy.x, enemy.y, target.x, target.y)
-            if (length > 0.001f) {
+            if (length > DIRECTION_EPSILON) {
                 enemy.facingX = (target.x - enemy.x) / length
                 enemy.facingY = (target.y - enemy.y) / length
             }
         }
     }
 
+    /** 적의 반대 방향과 현재 각도의 차이를 정규화한 뒤 제한된 각도만큼 원주를 따라 이동한다. */
     private fun flank(member: MemberState, enemy: EnemyState, delta: Float) {
         val dx = member.x - enemy.x
         val dy = member.y - enemy.y
-        val radius = 132f
+        val radius = FLANK_RADIUS
         val rearAngle = kotlin.math.atan2(-enemy.facingY, -enemy.facingX)
         val angle = kotlin.math.atan2(dy, dx)
         val difference = kotlin.math.atan2(kotlin.math.sin(rearAngle - angle), kotlin.math.cos(rearAngle - angle))
-        // Orbit around the collision body instead of walking through the target.
-        val nextAngle = angle + difference.coerceIn(-0.35f, 0.35f)
-        val desiredX = (enemy.x + kotlin.math.cos(nextAngle) * radius).coerceIn(180f, 1100f)
-        val desiredY = (enemy.y + kotlin.math.sin(nextAngle) * radius).coerceIn(150f, 650f)
+        // 충돌 영역을 통과하지 않도록 원주를 따라 후방으로 회전한다.
+        val nextAngle = angle + difference.coerceIn(-FLANK_ANGLE_STEP, FLANK_ANGLE_STEP)
+        val desiredX = (enemy.x + kotlin.math.cos(nextAngle) * radius).coerceIn(MIN_X, MAX_X)
+        val desiredY = (enemy.y + kotlin.math.sin(nextAngle) * radius).coerceIn(MIN_Y, MAX_Y)
         val length = distance(member.x, member.y, desiredX, desiredY)
-        if (length < 3f) return
+        if (length < FLANK_STOP_DISTANCE) return
         val step = min(1f, member.character.moveSpeed * delta / length)
         member.x += (desiredX - member.x) * step
         member.y += (desiredY - member.y) * step
         member.intent = MovementIntent.APPROACH
     }
 
+    /** 사거리와 후퇴 이력을 이용해 접근·후퇴를 결정하고, 이동 후 충돌 겹침을 해소한다. */
     private fun moveCombatants(delta: Float) {
         members.forEach { member ->
             val wasRetreating = member.intent == MovementIntent.RETREAT
@@ -350,26 +429,26 @@ class BattleSimulator(
             }
             val nearest = enemies.filter { it.hp > 0f }.minByOrNull { distance(member.x, member.y, it.x, it.y) } ?: enemy
             val dangerDistance = distance(member.x, member.y, nearest.x, nearest.y)
-            val retreat = !melee && dangerDistance < if (wasRetreating) 290f else 230f
+            val retreat = !melee && dangerDistance < if (wasRetreating) RETREAT_END_RANGE else RETREAT_START_RANGE
             val targetDistance = distance(member.x, member.y, enemy.x, enemy.y)
-            if (retreat || targetDistance > member.character.attackStyle.range - 8f) {
+            if (retreat || targetDistance > member.character.attackStyle.range - APPROACH_MARGIN) {
                 val target = if (retreat) nearest else enemy
-                val length = max(1f, distance(member.x, member.y, target.x, target.y))
-                val desired = if (retreat) 290f else member.character.attackStyle.range - 20f
+                val length = max(MIN_MOVEMENT_DISTANCE, distance(member.x, member.y, target.x, target.y))
+                val desired = if (retreat) RETREAT_END_RANGE else member.character.attackStyle.range - APPROACH_STOP_MARGIN
                 val amount = min(member.character.moveSpeed * delta, kotlin.math.abs(length - desired))
                 val sign = if (retreat) -1f else 1f
-                member.x = (member.x + (target.x - member.x) / length * amount * sign).coerceIn(180f, 1100f)
-                member.y = (member.y + (target.y - member.y) / length * amount * sign).coerceIn(150f, 650f)
+                member.x = (member.x + (target.x - member.x) / length * amount * sign).coerceIn(MIN_X, MAX_X)
+                member.y = (member.y + (target.y - member.y) / length * amount * sign).coerceIn(MIN_Y, MAX_Y)
                 member.intent = if (retreat) MovementIntent.RETREAT else MovementIntent.APPROACH
             }
         }
         enemies.filter { it.hp > 0f && it.castRemaining <= 0f }.forEach { enemy ->
             val target = threatTarget(enemy) ?: return@forEach
             val length = distance(enemy.x, enemy.y, target.x, target.y)
-            if (length > 135f) {
-                val step = min(dungeon.enemyMoveSpeed * delta, length - 135f) / length
-                enemy.x = (enemy.x + (target.x - enemy.x) * step).coerceIn(320f, 1100f)
-                enemy.y = (enemy.y + (target.y - enemy.y) * step).coerceIn(150f, 650f)
+            if (length > ENEMY_STOP_RANGE) {
+                val step = min(dungeon.enemyMoveSpeed * delta, length - ENEMY_STOP_RANGE) / length
+                enemy.x = (enemy.x + (target.x - enemy.x) * step).coerceIn(ENEMY_MIN_X, MAX_X)
+                enemy.y = (enemy.y + (target.y - enemy.y) * step).coerceIn(MIN_Y, MAX_Y)
             }
         }
         separateCombatants()
@@ -382,14 +461,15 @@ class BattleSimulator(
         var y: Float
             get() = member?.y ?: enemy!!.y
             set(value) { if (member != null) member.y = value else enemy!!.y = value }
-        val radius: Float get() = if (member != null) 55f else 65f
+        val radius: Float get() = if (member != null) MEMBER_RADIUS else ENEMY_RADIUS
     }
 
+    /** 충돌 원이 겹치는 쌍을 중심 연결 방향으로 반씩 밀어내고 경계 안에서 반복 보정한다. */
     private fun separateCombatants() {
         val bodies = members.filter { it.hp > 0f }.map { Body(member = it) } +
             enemies.filter { it.hp > 0f }.map { Body(enemy = it) }
-        // Resolve all pairs, including enemies and opposing teams, before range checks.
-        repeat(96) {
+        // 사거리 판정 전에 진영에 관계없이 모든 생존 개체 쌍의 겹침을 해소한다.
+        repeat(SEPARATION_ITERATIONS) {
             var corrected = false
             for (i in bodies.indices) for (j in i + 1 until bodies.size) {
                 val a = bodies[i]
@@ -398,14 +478,14 @@ class BattleSimulator(
                 val minimum = a.radius + b.radius
                 if (length >= minimum) continue
                 corrected = true
-                val dx = if (length < 0.001f) 0f else (b.x - a.x) / length
-                val dy = if (length < 0.001f) 1f else (b.y - a.y) / length
-                val push = (minimum - length + 0.02f) * 0.5f
-                a.x = (a.x - dx * push).coerceIn(180f, 1100f)
-                a.y = (a.y - dy * push).coerceIn(150f, 650f)
-                b.x = (b.x + dx * push).coerceIn(180f, 1100f)
-                b.y = (b.y + dy * push).coerceIn(150f, 650f)
-                if (push > 0.5f) listOfNotNull(a.member, b.member).forEach {
+                val dx = if (length < DIRECTION_EPSILON) 0f else (b.x - a.x) / length
+                val dy = if (length < DIRECTION_EPSILON) 1f else (b.y - a.y) / length
+                val push = (minimum - length + SEPARATION_PADDING) * SEPARATION_SHARE
+                a.x = (a.x - dx * push).coerceIn(MIN_X, MAX_X)
+                a.y = (a.y - dy * push).coerceIn(MIN_Y, MAX_Y)
+                b.x = (b.x + dx * push).coerceIn(MIN_X, MAX_X)
+                b.y = (b.y + dy * push).coerceIn(MIN_Y, MAX_Y)
+                if (push > SPACING_INTENT_THRESHOLD) listOfNotNull(a.member, b.member).forEach {
                     if (it.intent == MovementIntent.HOLD) it.intent = MovementIntent.SPACING
                 }
             }
@@ -415,11 +495,11 @@ class BattleSimulator(
 
     private fun enemyAttack(enemy: EnemyState) {
         val target = threatTarget(enemy) ?: return
-        val reduction = if (target.character.role == Role.TANK) 0.68f else 1f
+        val reduction = if (target.character.role == Role.TANK) TANK_DAMAGE_MULTIPLIER else 1f
         damageMember(target, dungeon.enemyAttack * reduction, enemy.id)
     }
 
-    // Equal threat uses formation order. Dead characters never participate in target selection.
+    // 위협 동률은 교환 대상 우선 후 편성 순서를 따르며, 사망자는 제외한다.
     private fun threatTarget(enemy: EnemyState): MemberState? =
         members.filter { it.hp > 0f }.maxWithOrNull(
             compareBy<MemberState> { enemy.threat.getValue(it.character.id) }
@@ -445,10 +525,11 @@ class BattleSimulator(
     private fun protector(): MemberState? =
         members.filter { it.hp > 0f }.maxByOrNull { it.character.maxHp }
 
+    /** 보호 담당자는 위협 부족분이 가장 큰 적을, 다른 캐릭터는 첫 생존 적을 선택한다. */
     private fun attackTarget(member: MemberState): EnemyState? {
         val alive = enemies.filter { it.hp > 0f }
         if (member === protector()) {
-            // First rescue the ally under the greatest threat deficit; ties retain monster order.
+            // 보호 담당자의 위협 부족분이 가장 큰 적을 우선하며, 동률이면 몬스터 순서를 유지한다.
             val unsecured = alive.filter { threatTarget(it) !== member }
             if (unsecured.isNotEmpty()) {
                 return unsecured.maxByOrNull { enemy ->
@@ -465,18 +546,18 @@ class BattleSimulator(
         when (dungeon.mechanic) {
             DungeonMechanic.BURST -> {
                 cues += CombatCue(CueType.WAVE, enemy.id, enemy.id)
-                members.filter { it.hp > 0f }.forEach { damageMember(it, 22f, enemy.id) }
+                members.filter { it.hp > 0f }.forEach { damageMember(it, BURST_DAMAGE, enemy.id) }
                 log("${dungeon.ability} hit the entire raid (${formation.monsterCount} monster(s))")
             }
 
             DungeonMechanic.SWARM -> {
                 cues += CombatCue(CueType.WAVE, enemy.id, enemy.id)
-                members.filter { it.hp > 0f }.forEach { damageMember(it, 11f, enemy.id) }
+                members.filter { it.hp > 0f }.forEach { damageMember(it, SWARM_DAMAGE, enemy.id) }
                 log("${dungeon.ability} released a swarm wave")
             }
 
             DungeonMechanic.REGEN -> {
-                val recovery = min(dungeon.enemyMaxHp - enemy.hp, if (enemy.sunderTime > 0f) 7f else 32f)
+                val recovery = min(dungeon.enemyMaxHp - enemy.hp, if (enemy.sunderTime > 0f) REDUCED_REGEN else REGEN_AMOUNT)
                 enemy.hp += recovery
                 cues += CombatCue(CueType.HEAL, enemy.id, enemy.id, recovery)
                 log("${dungeon.ability}: ${enemy.id} regenerated ${recovery.toInt()} HP")
@@ -484,6 +565,7 @@ class BattleSimulator(
         }
     }
 
+    /** 후방 배율을 적용한 실제 피해를 체력으로 제한하고 역할에 따라 위협을 누적한다. */
     private fun damageEnemy(
         source: MemberState, amount: Float, skillType: SkillType? = null,
         target: EnemyState? = attackTarget(source),
@@ -493,7 +575,7 @@ class BattleSimulator(
         val applied = min(BattleFacing.damage(amount, rear), target.hp)
         target.hp -= applied
         source.damageDealt += applied
-        val multiplier = if (source === protector() || source.character.role == Role.TANK) 5f else 1f
+        val multiplier = if (source === protector() || source.character.role == Role.TANK) PROTECTOR_THREAT_MULTIPLIER else 1f
         target.threat[source.character.id] = target.threat.getValue(source.character.id) + applied * multiplier
         if (applied > 0f) {
             cues += CombatCue(CueType.HIT, source.character.id, target.id, applied, skillType, rear)
@@ -504,6 +586,7 @@ class BattleSimulator(
         }
     }
 
+    /** 후방 피해에서 보호막을 먼저 소모한 뒤 남은 피해만 체력과 피격 통계에 반영한다. */
     private fun damageMember(target: MemberState, amount: Float, enemyId: String) {
         val source = enemies.first { it.id == enemyId }
         val rear = BattleFacing.isRear(source.x - target.x, source.y - target.y, target.facingX, target.facingY)
@@ -524,26 +607,8 @@ class BattleSimulator(
         log(message)
     }
 
-    private fun analyze(results: List<CharacterBattleResult>): String {
-        if (victory) return "Victory. Review the stats and try another composition."
-        if (results.none { it.character.role == Role.HEALER }) return "The raid lacked recovery. Add a Healer or more protection."
-        if (dungeon.mechanic == DungeonMechanic.REGEN && results.none { it.character.skillType == SkillType.SUNDER }) {
-            return "Enemy regeneration erased your progress. Bring MIRA's healing reduction."
-        }
-        if (dungeon.mechanic == DungeonMechanic.SWARM && results.none { it.character.skillType == SkillType.CLEAVE }) {
-            return "The swarm survived too long. EMBER's cleave is effective here."
-        }
-        if (results.count { it.survived } <= 1) return "Incoming damage overwhelmed the raid. Add protection or an interrupt."
-        return "Damage was too low for the time limit. Add a DPS or choose stronger offense."
-    }
-
     private fun log(message: String) {
         events += BattleEvent(elapsedTime, message)
     }
 
-    companion object {
-        private const val STEP = 0.1f
-        private const val MAX_SHIELD = 30f
-        private const val ABILITY_CAST_TIME = 1.2f
-    }
 }

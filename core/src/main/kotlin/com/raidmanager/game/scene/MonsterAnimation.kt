@@ -4,10 +4,11 @@ import com.raidmanager.game.GameAssets.SpritePose
 import com.raidmanager.game.model.BattleSimulator.CombatCue
 import com.raidmanager.game.model.BattleSimulator.CueType
 import com.raidmanager.game.model.DungeonMechanic
+import com.raidmanager.game.scene.MonsterAnimationStyle as Style
 import kotlin.math.PI
 import kotlin.math.sin
 
-/** Cue-driven presentation state only; does not affect damage, cooldowns or battle outcomes. */
+/** 전투 이벤트로 몬스터의 표현 상태만 갱신한다. 피해량과 전투 결과는 변경하지 않는다. */
 internal class MonsterAnimation(private val enemyId: String = "boss", phase: Float = 0f) {
     data class Motion(
         val pose: SpritePose,
@@ -22,11 +23,11 @@ internal class MonsterAnimation(private val enemyId: String = "boss", phase: Flo
     )
 
     private var clock = phase
-    private var actionAge = 10f
-    private var hitAge = 10f
-    private var interruptAge = 10f
-    private var healAge = 10f
-    private var waveAge = 10f
+    private var actionAge = Style.INACTIVE_AGE
+    private var hitAge = Style.INACTIVE_AGE
+    private var interruptAge = Style.INACTIVE_AGE
+    private var healAge = Style.INACTIVE_AGE
+    private var waveAge = Style.INACTIVE_AGE
     private var deathAge = 0f
     private var dead = false
     private var finished = false
@@ -58,27 +59,28 @@ internal class MonsterAnimation(private val enemyId: String = "boss", phase: Flo
                 cue.source == enemyId && cue.type == CueType.HIT -> actionAge = 0f
             }
         }
-        if (interruptAge < 0.5f) {
-            actionAge = 10f
-            waveAge = 10f
+        if (interruptAge < Style.INTERRUPT_DURATION) {
+            actionAge = Style.INACTIVE_AGE
+            waveAge = Style.INACTIVE_AGE
         }
     }
 
+    /** 사인 곡선으로 공격 왕복과 호흡을 합성하고, 사망·차단 상태를 우선 적용해 발 기준 변형을 구한다. */
     fun motion(mechanic: DungeonMechanic): Motion {
         if (dead) {
-            val fall = (deathAge / 0.7f).coerceIn(0f, 1f)
-            return Motion(SpritePose.HURT, scaleX = 1f + fall * 0.12f, scaleY = 1f - fall * 0.65f,
-                rotation = if (mechanic == DungeonMechanic.REGEN) 0f else -12f * fall, alpha = 1f - fall * 0.6f)
+            val fall = (deathAge / Style.DEATH_DURATION).coerceIn(0f, 1f)
+            return Motion(SpritePose.HURT, scaleX = 1f + fall * Style.DEATH_WIDTH, scaleY = 1f - fall * Style.DEATH_COLLAPSE,
+                rotation = if (mechanic == DungeonMechanic.REGEN) 0f else Style.DEATH_ROTATION * fall, alpha = 1f - fall * Style.DEATH_FADE)
         }
         if (finished) return Motion(SpritePose.IDLE)
-        val interrupted = interruptAge < 0.5f
-        val acting = actionAge < 0.6f && !interrupted
-        val hurt = hitAge < 0.22f || interrupted
-        val action = if (acting) sin(actionAge / 0.6f * PI).toFloat() else 0f
-        val wobble = sin(clock * 3f).toFloat()
-        val recovery = (1f - healAge / 0.8f).coerceIn(0f, 1f)
+        val interrupted = interruptAge < Style.INTERRUPT_DURATION
+        val acting = actionAge < Style.ACTION_DURATION && !interrupted
+        val hurt = hitAge < Style.HURT_DURATION || interrupted
+        val action = if (acting) sin(actionAge / Style.ACTION_DURATION * PI).toFloat() else 0f
+        val wobble = sin(clock * Style.BREATH_SPEED).toFloat()
+        val recovery = (1f - healAge / Style.HEAL_DURATION).coerceIn(0f, 1f)
         val slime = mechanic == DungeonMechanic.REGEN
-        val stride = if (mechanic == DungeonMechanic.SWARM) 54f else 30f
+        val stride = if (mechanic == DungeonMechanic.SWARM) Style.SWARM_STRIDE else Style.NORMAL_STRIDE
         return Motion(
             pose = when {
                 interrupted -> SpritePose.HURT
@@ -86,13 +88,13 @@ internal class MonsterAnimation(private val enemyId: String = "boss", phase: Flo
                 hurt -> SpritePose.HURT
                 else -> SpritePose.IDLE
             },
-            offsetX = -action * stride + if (hurt && !acting) 9f else 0f,
-            scaleX = if (slime) 1f + wobble * 0.025f + action * 0.12f else 1f,
-            scaleY = 1f + wobble * (if (slime) 0.04f else 0.012f) - action * (if (slime) 0.1f else 0.025f),
-            rotation = if (slime) wobble * 1.5f else action * 3f,
+            offsetX = -action * stride + if (hurt && !acting) Style.HURT_OFFSET else 0f,
+            scaleX = if (slime) 1f + wobble * Style.SLIME_WIDTH_BREATH + action * Style.SLIME_WIDTH_ACTION else 1f,
+            scaleY = 1f + wobble * (if (slime) Style.SLIME_HEIGHT_BREATH else Style.NORMAL_HEIGHT_BREATH) - action * (if (slime) Style.SLIME_HEIGHT_ACTION else Style.NORMAL_HEIGHT_ACTION),
+            rotation = if (slime) wobble * Style.SLIME_ROTATION else action * Style.ACTION_ROTATION,
             hurt = hurt,
             recovery = recovery,
-            wave = (1f - waveAge / 0.7f).coerceIn(0f, 1f),
+            wave = (1f - waveAge / Style.WAVE_DURATION).coerceIn(0f, 1f),
         )
     }
 }

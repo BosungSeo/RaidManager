@@ -12,7 +12,7 @@ import com.badlogic.gdx.utils.Disposable
 
 /** Scene에서 함께 사용하는 그래픽 리소스를 생성하고 해제한다. */
 class GameAssets : Disposable {
-    private val battleSounds = listOf("hit", "shot", "skill", "heal", "shield", "interrupt", "wave", "start", "victory", "defeat")
+    private val battleSounds = AssetSettings.BATTLE_SOUND_NAMES
         .associateWith { name -> com.badlogic.gdx.Gdx.audio.newSound(com.badlogic.gdx.Gdx.files.internal("audio/$name.wav")) }
 
     fun playBattleSound(name: String, volume: Float) {
@@ -21,78 +21,78 @@ class GameAssets : Disposable {
 
     fun stopBattleSounds() = battleSounds.values.forEach { it.stop() }
 
-    val titleImage = Texture("Title.png")
+    val titleImage = Texture(AssetSettings.TITLE_PATH)
     val font = BitmapFont()
     val textLayout = GlyphLayout()
     val buttonTexture: Texture
     val circleTexture: Texture
-    private val heroSheet = Texture("sprites/raid-heroes.png")
-    private val monsterSheet = Texture("sprites/raid-monsters.png")
-    private val effectSheet = Texture("sprites/monster-vfx.png").apply {
+    private val heroSheet = Texture(AssetSettings.HERO_SHEET_PATH)
+    private val monsterSheet = Texture(AssetSettings.MONSTER_SHEET_PATH)
+    private val effectSheet = Texture(AssetSettings.MONSTER_EFFECT_PATH).apply {
         setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
     }
-    val monsterEffects = List(4) { index ->
-        TextureRegion(effectSheet, index % 2 * (effectSheet.width / 2), index / 2 * (effectSheet.height / 2),
-            effectSheet.width / 2, effectSheet.height / 2)
+    val monsterEffects = List(AssetSettings.MONSTER_EFFECT_COUNT) { index ->
+        TextureRegion(effectSheet, index % AssetSettings.MONSTER_EFFECT_COLUMNS * (effectSheet.width / AssetSettings.MONSTER_EFFECT_COLUMNS), index / AssetSettings.MONSTER_EFFECT_COLUMNS * (effectSheet.height / AssetSettings.MONSTER_EFFECT_ROWS),
+            effectSheet.width / AssetSettings.MONSTER_EFFECT_COLUMNS, effectSheet.height / AssetSettings.MONSTER_EFFECT_ROWS)
     }
-    private val heroEffectSheet = Texture("sprites/hero-vfx.png").apply {
+    private val heroEffectSheet = Texture(AssetSettings.HERO_EFFECT_PATH).apply {
         setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
     }
     private val heroEffects = com.raidmanager.game.model.SkillType.entries.associateWith { skill ->
-        val width = heroEffectSheet.width / 3
-        val height = heroEffectSheet.height / 2
-        TextureRegion(heroEffectSheet, skill.ordinal % 3 * width, skill.ordinal / 3 * height, width, height)
+        val width = heroEffectSheet.width / AssetSettings.HERO_EFFECT_COLUMNS
+        val height = heroEffectSheet.height / AssetSettings.HERO_EFFECT_ROWS
+        TextureRegion(heroEffectSheet, skill.ordinal % AssetSettings.HERO_EFFECT_COLUMNS * width, skill.ordinal / AssetSettings.HERO_EFFECT_COLUMNS * height, width, height)
     }
 
     fun heroEffect(skill: com.raidmanager.game.model.SkillType): TextureRegion = heroEffects.getValue(skill)
-    private val battleBackgrounds = listOf("colossus", "swarm", "slime").associateWith { id ->
+    private val battleBackgrounds = AssetSettings.MONSTER_IDS.associateWith { id ->
         Texture("backgrounds/$id.png").apply {
             setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
         }
     }
-    private val heroRows = listOf("aegis", "luna", "rook", "ember", "nyx", "mira")
+    private val heroRows = AssetSettings.HERO_IDS
     data class SpriteFrame(val region: TextureRegion, val footX: Float, val footY: Float)
     enum class SpritePose { IDLE, ACTION, HURT }
 
-    private val animatedSheets = listOf("aegis", "luna", "rook", "ember", "nyx", "mira", "colossus", "swarm", "slime")
+    private val animatedSheets = AssetSettings.ANIMATED_IDS
         .associateWith { id -> Texture("sprites/animated/$id.png").apply {
             setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
         } }
     private val animatedFrames = animatedSheets.mapValues { (_, sheet) ->
-        List(16) { index ->
-            val left = index % 4 * sheet.width / 4
-            val top = index / 4 * sheet.height / 4
-            val width = (index % 4 + 1) * sheet.width / 4 - left
-            val height = (index / 4 + 1) * sheet.height / 4 - top
-            SpriteFrame(TextureRegion(sheet, left, top, width, height), width * 0.5f, height * 0.06f)
+        List(AssetSettings.ANIMATION_FRAME_COUNT) { index ->
+            val left = index % AssetSettings.ANIMATION_COLUMNS * sheet.width / AssetSettings.ANIMATION_COLUMNS
+            val top = index / AssetSettings.ANIMATION_COLUMNS * sheet.height / AssetSettings.ANIMATION_ROWS
+            val width = (index % AssetSettings.ANIMATION_COLUMNS + 1) * sheet.width / AssetSettings.ANIMATION_COLUMNS - left
+            val height = (index / AssetSettings.ANIMATION_COLUMNS + 1) * sheet.height / AssetSettings.ANIMATION_ROWS - top
+            SpriteFrame(TextureRegion(sheet, left, top, width, height), width * AssetSettings.FOOT_X_RATIO, height * AssetSettings.FOOT_Y_RATIO)
         }
     }
 
-    fun animatedFrame(id: String, index: Int): SpriteFrame = animatedFrames.getValue(id)[index.coerceIn(0, 15)]
+    fun animatedFrame(id: String, index: Int): SpriteFrame = animatedFrames.getValue(id)[index.coerceIn(0, AssetSettings.ANIMATION_FRAME_COUNT - 1)]
 
-    // Measured from the authored 887 x 1774 sheet; generated poses do not form an exact uniform grid.
+    // 불균일한 원본 시트는 측정 경계로 자르고 발 좌표를 각 영역의 로컬 좌표로 변환한다.
     private val heroFrames = heroRows.mapIndexed { row, id ->
-        val tops = intArrayOf(20, 280, 550, 825, 1150, 1440)
-        val bottoms = intArrayOf(270, 545, 820, 1135, 1430, 1740)
-        val feet = intArrayOf(253, 535, 809, 1115, 1422, 1725)
-        val middleEnd = if (row == 2) 665 else if (row == 5) 650 else 630
-        val edges = intArrayOf(0, 285, middleEnd, 887)
-        val anchors = intArrayOf(145, 427, 756)
-        id to List(3) { column ->
+        val tops = AssetSettings.HERO_TOPS
+        val bottoms = AssetSettings.HERO_BOTTOMS
+        val feet = AssetSettings.HERO_FEET
+        val middleEnd = AssetSettings.HERO_MIDDLE_ENDS[row]
+        val edges = intArrayOf(0, AssetSettings.HERO_EDGES_START, middleEnd, AssetSettings.HERO_SHEET_WIDTH)
+        val anchors = AssetSettings.HERO_ANCHORS
+        id to List(SpritePose.entries.size) { column ->
             SpriteFrame(TextureRegion(heroSheet, edges[column], tops[row],
                 edges[column + 1] - edges[column], bottoms[row] - tops[row]),
                 (anchors[column] - edges[column]).toFloat(), (bottoms[row] - feet[row]).toFloat())
         }
     }.toMap()
 
-    // Authored sheet is 1254 square, with non-uniform rows. Anchors keep each creature's base stationary.
-    private val monsterFrames = listOf("colossus", "swarm", "slime").mapIndexed { row, id ->
-        val tops = intArrayOf(0, 480, 870)
-        val bottoms = intArrayOf(480, 870, 1254)
-        val feet = intArrayOf(440, 830, 1173)
-        val edges = intArrayOf(0, if (row == 2) 407 else 400, 880, 1254)
-        val anchors = intArrayOf(210, if (row == 0) 690 else if (row == 1) 650 else 705, 1080)
-        id to List(3) { column ->
+    // 몬스터별 비균일 영역을 자른 후 발 기준점을 보존해 자세 전환 시 위치가 흔들리지 않게 한다.
+    private val monsterFrames = AssetSettings.MONSTER_IDS.mapIndexed { row, id ->
+        val tops = AssetSettings.MONSTER_TOPS
+        val bottoms = AssetSettings.MONSTER_BOTTOMS
+        val feet = AssetSettings.MONSTER_FEET
+        val edges = intArrayOf(0, AssetSettings.MONSTER_FIRST_ENDS[row], AssetSettings.MONSTER_EDGES_END, AssetSettings.MONSTER_SHEET_WIDTH)
+        val anchors = intArrayOf(AssetSettings.MONSTER_FIRST_ANCHOR, AssetSettings.MONSTER_MIDDLE_ANCHORS[row], AssetSettings.MONSTER_LAST_ANCHOR)
+        id to List(SpritePose.entries.size) { column ->
             SpriteFrame(TextureRegion(monsterSheet, edges[column], tops[row],
                 edges[column + 1] - edges[column], bottoms[row] - tops[row]),
                 (anchors[column] - edges[column]).toFloat(), (bottoms[row] - feet[row]).toFloat())
@@ -111,6 +111,7 @@ class GameAssets : Disposable {
     fun battleBackground(dungeonId: String): Texture =
         requireNotNull(battleBackgrounds[dungeonId]) { "No background registered for dungeon: $dungeonId" }
 
+    /** 배경색 우세도를 smoothstep으로 정규화해 투명도를 구하고 가장자리의 배경색 번짐을 제거한다. */
     private fun createChromaShader(magenta: Boolean = false): ShaderProgram {
         val standard = SpriteBatch.createDefaultShader()
         val vertex = standard.vertexShaderSource
@@ -147,9 +148,9 @@ class GameAssets : Disposable {
         pixmap.fill()
         buttonTexture = Texture(pixmap)
         pixmap.dispose()
-        val circle = Pixmap(64, 64, Pixmap.Format.RGBA8888)
+        val circle = Pixmap(AssetSettings.CIRCLE_SIZE, AssetSettings.CIRCLE_SIZE, Pixmap.Format.RGBA8888)
         circle.setColor(Color.WHITE)
-        circle.fillCircle(32, 32, 30)
+        circle.fillCircle(AssetSettings.CIRCLE_CENTER, AssetSettings.CIRCLE_CENTER, AssetSettings.CIRCLE_RADIUS)
         circleTexture = Texture(circle)
         circleTexture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
         circle.dispose()

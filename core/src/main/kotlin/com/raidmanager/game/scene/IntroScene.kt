@@ -1,13 +1,14 @@
 package com.raidmanager.game.scene
 
+import com.raidmanager.game.scene.SceneStyle.Intro as Style
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.raidmanager.game.GameAssets
 
 class IntroScene(private val assets: GameAssets, private val onFinished: () -> Unit,) : Scene {
     private var elapsedTime = 0f
-    private val duration = 3f
-    private val fadeOutStart = 1.6f
+    private val duration = Style.DURATION
+    private val fadeOutStart = Style.FADE_START
 
     override fun updateGame(delta: Float) {
         elapsedTime += delta
@@ -26,26 +27,16 @@ class IntroScene(private val assets: GameAssets, private val onFinished: () -> U
         }
 
         assets.font.color.set(1f, 1f, 1f, alpha.coerceIn(0f, 1f))
-        assets.font.data.setScale(1.25f)
+        assets.font.data.setScale(Style.TITLE_SCALE)
         assets.font.draw(
             batch,
             "RaidManager",
-            Gdx.graphics.width * 0.08f,
-            Gdx.graphics.height * 0.72f,
+            Gdx.graphics.width * Style.TITLE_X_RATIO,
+            Gdx.graphics.height * Style.TITLE_Y_RATIO,
         )
     }
 
-    private fun drawTitleImage(batch: SpriteBatch) {
-        val scale = minOf(
-            Gdx.graphics.width.toFloat() / assets.titleImage.width,
-            Gdx.graphics.height.toFloat() / assets.titleImage.height,
-        )
-        val width = assets.titleImage.width * scale
-        val height = assets.titleImage.height * scale
-        val x = (Gdx.graphics.width - width) / 2f
-        val y = (Gdx.graphics.height - height) / 2f
+    private fun drawTitleImage(batch: SpriteBatch) =
+        Ui.titleBackground(assets, batch, Gdx.graphics.width, Gdx.graphics.height)
 
-        batch.setColor(1f, 1f, 1f, 1f)
-        batch.draw(assets.titleImage, x, y, width, height)
-    }
 }

@@ -3,7 +3,6 @@ package com.raidmanager.game
 import com.badlogic.gdx.ApplicationAdapter
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.InputProcessor
-import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.utils.ScreenUtils
 import com.raidmanager.game.model.BattleResult
@@ -32,10 +31,10 @@ class RaidManagerGame : ApplicationAdapter() {
 
     override fun render() {
         // 긴 프레임 뒤 게임 상태가 한꺼번에 크게 변하지 않도록 delta의 최댓값을 제한한다.
-        val delta = Gdx.graphics.deltaTime.coerceAtMost(0.1f)
+        val delta = Gdx.graphics.deltaTime.coerceAtMost(GameRuntimeSettings.MAX_FRAME_DELTA)
         currentScene.updateGame(delta)
 
-        ScreenUtils.clear(Color(0.08f, 0.09f, 0.13f, 1f))
+        ScreenUtils.clear(GameRuntimeSettings.BACKGROUND_COLOR)
         batch.begin()
         currentScene.renderGame(batch)
         batch.end()

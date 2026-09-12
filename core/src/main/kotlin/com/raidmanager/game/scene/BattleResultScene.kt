@@ -1,5 +1,6 @@
 package com.raidmanager.game.scene
 
+import com.raidmanager.game.scene.SceneStyle.BattleResult as Style
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.InputAdapter
 import com.badlogic.gdx.graphics.Color
@@ -50,39 +51,39 @@ class BattleResultScene(
     }
 
     override fun renderGame(batch: SpriteBatch) {
-        val margin = Gdx.graphics.width * 0.07f
-        val outcomeColor = if (result.victory) Color(0.4f, 0.9f, 0.55f, 1f) else Color(1f, 0.42f, 0.35f, 1f)
+        val margin = Gdx.graphics.width * Style.MARGIN_RATIO
+        val outcomeColor = if (result.victory) Style.VICTORY_COLOR else Style.DEFEAT_COLOR
         val outcome = if (result.victory) "RAID VICTORY" else "RAID DEFEAT"
-        Ui.text(assets, batch, outcome, margin, Gdx.graphics.height - 44f, 1.4f, outcomeColor)
+        Ui.text(assets, batch, outcome, margin, Gdx.graphics.height - Style.TITLE_TOP, Style.TITLE_SCALE, outcomeColor)
         Ui.text(
             assets,
             batch,
             "${dungeon.name}  /  ${"%.1f".format(result.elapsedTime)} SEC",
             margin,
-            Gdx.graphics.height - 78f,
-            0.72f,
+            Gdx.graphics.height - Style.SUMMARY_TOP,
+            Style.SUMMARY_SCALE,
             Color.LIGHT_GRAY,
         )
 
-        Ui.text(assets, batch, "COMBAT STATISTICS", margin, Gdx.graphics.height - 130f, 0.82f, Color(0.55f, 0.78f, 1f, 1f))
+        Ui.text(assets, batch, "COMBAT STATISTICS", margin, Gdx.graphics.height - Style.STATS_TOP, Style.LABEL_SCALE, Style.STATS_COLOR)
         result.members.forEachIndexed { index, member ->
-            val y = Gdx.graphics.height - 172f - index * 54f
+            val y = Gdx.graphics.height - Style.MEMBER_TOP - index * Style.MEMBER_STEP
             val status = if (member.survived) "ALIVE" else "DOWN"
-            Ui.text(assets, batch, member.character.name, margin, y, 0.82f)
+            Ui.text(assets, batch, member.character.name, margin, y, Style.LABEL_SCALE)
             Ui.text(
                 assets,
                 batch,
                 "DMG ${member.damageDealt.toInt()}   HEAL ${member.healingDone.toInt()}   " +
                     "TAKEN ${member.damageTaken.toInt()}   SKILLS ${member.skillUses}   $status",
-                margin + 120f,
+                margin + Style.STATS_OFFSET,
                 y,
-                0.66f,
+                Style.STATS_SCALE,
                 if (member.survived) Color.LIGHT_GRAY else Color.SALMON,
             )
         }
 
-        Ui.text(assets, batch, "ANALYSIS", margin, 248f, 0.82f, Color(1f, 0.78f, 0.38f, 1f))
-        Ui.text(assets, batch, result.analysis, margin, 218f, 0.7f, Color.LIGHT_GRAY)
+        Ui.text(assets, batch, "ANALYSIS", margin, Style.ANALYSIS_TITLE_Y, Style.LABEL_SCALE, Style.ANALYSIS_COLOR)
+        Ui.text(assets, batch, result.analysis, margin, Style.ANALYSIS_Y, Style.ANALYSIS_SCALE, Color.LIGHT_GRAY)
 
         val retry = retryBounds()
         Ui.button(assets, batch, "RETRY", retry.x, retry.y, retry.width, retry.height)
@@ -91,16 +92,15 @@ class BattleResultScene(
     }
 
     private fun retryBounds(): Bounds {
-        val margin = Gdx.graphics.width * 0.07f
-        val gap = 14f
+        val margin = Gdx.graphics.width * Style.MARGIN_RATIO
+        val gap = Style.BUTTON_GAP
         val width = (Gdx.graphics.width - margin * 2f - gap) / 2f
-        return Bounds(margin, 64f, width, 58f)
+        return Bounds(margin, Style.BUTTON_Y, width, Style.BUTTON_HEIGHT)
     }
 
     private fun changeBounds(): Bounds {
         val retry = retryBounds()
-        return Bounds(retry.x + retry.width + 14f, retry.y, retry.width, retry.height)
+        return Bounds(retry.x + retry.width + Style.BUTTON_GAP, retry.y, retry.width, retry.height)
     }
 
-    private data class Bounds(val x: Float, val y: Float, val width: Float, val height: Float)
 }

@@ -1,7 +1,9 @@
 package com.raidmanager.game.scene
 
-/** Oblique ground plane; all actors, targets and effects share the same foot coordinates. */
+/** 전장 좌표에 비스듬한 평면 변환을 적용하여 캐릭터와 효과가 동일한 발 위치를 공유하게 한다. */
 internal object BattleProjection {
-    fun x(x: Float, y: Float): Float = 640f + (x - 640f) * 0.82f - (y - 400f) * 0.6f
-    fun y(x: Float, y: Float): Float = 340f + (x - 640f) * 0.24f + (y - 400f) * 0.44f
+    fun facingX(x: Float, y: Float): Float = x * ProjectionStyle.X_SCALE - y * ProjectionStyle.Y_SKEW
+
+    fun x(x: Float, y: Float): Float = ProjectionStyle.CENTER_X + (x - ProjectionStyle.CENTER_X) * ProjectionStyle.X_SCALE - (y - ProjectionStyle.CENTER_Y) * ProjectionStyle.Y_SKEW
+    fun y(x: Float, y: Float): Float = ProjectionStyle.SCREEN_Y + (x - ProjectionStyle.CENTER_X) * ProjectionStyle.X_SKEW + (y - ProjectionStyle.CENTER_Y) * ProjectionStyle.Y_SCALE
 }
