@@ -99,7 +99,8 @@ data class DungeonDefinition(
 
 data class RaidFormation(val members: List<CharacterDefinition>, val monsterCount: Int = BattleRules.MIN_MONSTER_COUNT) {
     init {
-        require(members.size == PARTY_SIZE) { "A raid formation must contain exactly $PARTY_SIZE members." }
+        require(members.size in MIN_PARTY_SIZE..MAX_PARTY_SIZE) { "A raid formation must contain 3 to 6 members." }
+        require(members.map { it.id }.distinct().size == members.size) { "Raid members must be unique." }
         require(monsterCount in MIN_MONSTER_COUNT..MAX_MONSTER_COUNT) {
             "Monster count must be between $MIN_MONSTER_COUNT and $MAX_MONSTER_COUNT."
         }
@@ -107,7 +108,8 @@ data class RaidFormation(val members: List<CharacterDefinition>, val monsterCoun
 
     companion object {
         /** 공격대 편성 인원. */
-        const val PARTY_SIZE = BattleRules.PARTY_SIZE
+        const val MIN_PARTY_SIZE = BattleRules.MIN_PARTY_SIZE
+        const val MAX_PARTY_SIZE = BattleRules.MAX_PARTY_SIZE
         /** 최소 몬스터 수. */
         const val MIN_MONSTER_COUNT = BattleRules.MIN_MONSTER_COUNT
         /** 최대 몬스터 수. */

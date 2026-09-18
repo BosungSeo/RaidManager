@@ -9,9 +9,36 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShaderProgram
 import com.badlogic.gdx.utils.Disposable
+import com.raidmanager.game.graphics.TankModelRenderer
 
 /** Scene에서 함께 사용하는 그래픽 리소스를 생성하고 해제한다. */
 class GameAssets : Disposable {
+    private val characterLibrary = lazy { com.raidmanager.game.graphics.CharacterAssetLibrary() }
+    val characterAssets: com.raidmanager.game.graphics.CharacterAssetLibrary get() = characterLibrary.value
+
+    private val demonRenderer = lazy { com.raidmanager.game.graphics.ExternalModelRenderer() }
+
+    fun demonFrame(
+        batch: SpriteBatch, clock: Float, moving: Boolean, actionAge: Float?, hitAge: Float?, alive: Boolean,
+    ): SpriteFrame = demonRenderer.value.renderFrame(batch, clock, moving, actionAge, hitAge, alive)
+
+    private val characterRenderers = com.raidmanager.game.graphics.CharacterModels.definitions.mapValues { (_, definition) ->
+        lazy {
+            com.raidmanager.game.graphics.ExternalModelRenderer(
+                definition.path, 55f, definition.clips, frameWidth = 576, originalUnlitColors = true,
+            )
+        }
+    }
+
+    fun characterModelFrame(
+        batch: SpriteBatch, id: String, clock: Float, moving: Boolean, actionAge: Float?, hitAge: Float?, alive: Boolean,
+    ): SpriteFrame = characterRenderers.getValue(id).value.renderFrame(batch, clock, moving, actionAge, hitAge, alive)
+
+    private val tankRenderer = lazy { TankModelRenderer() }
+
+    fun tankFrame(batch: SpriteBatch, frameIndex: Int): SpriteFrame =
+        tankRenderer.value.renderFrame(batch, frameIndex)
+
     private val battleSounds = AssetSettings.BATTLE_SOUND_NAMES
         .associateWith { name -> com.badlogic.gdx.Gdx.audio.newSound(com.badlogic.gdx.Gdx.files.internal("audio/$name.wav")) }
 
@@ -109,7 +136,7 @@ class GameAssets : Disposable {
         requireNotNull(monsterFrames[id]) { "No sprite registered for dungeon: $id" }[pose.ordinal]
 
     fun battleBackground(dungeonId: String): Texture =
-        requireNotNull(battleBackgrounds[dungeonId]) { "No background registered for dungeon: $dungeonId" }
+        requireNotNull(battleBackgrounds[if (dungeonId == "demon") "colossus" else dungeonId]) { "No background registered for dungeon: $dungeonId" }
 
     /** 배경색 우세도를 smoothstep으로 정규화해 투명도를 구하고 가장자리의 배경색 번짐을 제거한다. */
     private fun createChromaShader(magenta: Boolean = false): ShaderProgram {
@@ -157,6 +184,10 @@ class GameAssets : Disposable {
     }
 
     override fun dispose() {
+        if (characterLibrary.isInitialized()) characterLibrary.value.dispose()
+        characterRenderers.values.filter { it.isInitialized() }.forEach { it.value.dispose() }
+        if (demonRenderer.isInitialized()) demonRenderer.value.dispose()
+        if (tankRenderer.isInitialized()) tankRenderer.value.dispose()
         animatedSheets.values.forEach { it.dispose() }
         battleSounds.values.forEach { it.dispose() }
         titleImage.dispose()

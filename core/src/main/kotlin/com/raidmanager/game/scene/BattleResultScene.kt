@@ -67,7 +67,7 @@ class BattleResultScene(
 
         Ui.text(assets, batch, "COMBAT STATISTICS", margin, Gdx.graphics.height - Style.STATS_TOP, Style.LABEL_SCALE, Style.STATS_COLOR)
         result.members.forEachIndexed { index, member ->
-            val y = Gdx.graphics.height - Style.MEMBER_TOP - index * Style.MEMBER_STEP
+            val y = Gdx.graphics.height - Style.MEMBER_TOP - index * (if (result.members.size > 3) 40f else Style.MEMBER_STEP)
             val status = if (member.survived) "ALIVE" else "DOWN"
             Ui.text(assets, batch, member.character.name, margin, y, Style.LABEL_SCALE)
             Ui.text(

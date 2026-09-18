@@ -140,6 +140,18 @@ object PrototypeContent {
     /** 선택 가능한 던전과 몬스터 밸런스 데이터. */
     val dungeons = listOf(
         DungeonDefinition(
+            id = "demon",
+            name = "DEMON SANCTUM",
+            description = "Demon unleashes a crushing burst. Guard or interrupt.",
+            enemyName = "DEMON",
+            enemyMaxHp = 650f,
+            enemyAttack = 14f,
+            enemyAttackInterval = 2f,
+            mechanic = DungeonMechanic.BURST,
+            enemyMoveSpeed = 90f,
+            mechanicInterval = 7f,
+        ),
+        DungeonDefinition(
             id = "colossus",
             name = "IRON COLOSSUS",
             description = "Heavy raid-wide burst. Guard, heal or interrupt it.",

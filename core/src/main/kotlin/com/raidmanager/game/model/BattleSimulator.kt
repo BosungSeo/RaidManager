@@ -99,6 +99,13 @@ class BattleSimulator(
         val targetId: String?,
         val facingX: Float = 1f,
         val facingY: Float = 0f,
+        val fatigue: Float = 0f,
+        val fatigueHpLoss: Float = 0f,
+        val fatigueHpLossPerSecond: Float = 0f,
+        val skillDamageMultiplier: Float = 1f,
+        val healingMultiplier: Float = 1f,
+        val skillCastDuration: Float = 0f,
+        val skillCastRemaining: Float = 0f,
     )
 
     data class Snapshot(
@@ -154,6 +161,10 @@ class BattleSimulator(
         var healingDone: Float = 0f,
         var damageTaken: Float = 0f,
         var skillUses: Int = 0,
+        var fatigueTime: Float = 0f,
+        var fatigueHpLoss: Float = 0f,
+        var skillCastRemaining: Float = 0f,
+        var skillCastDuration: Float = 0f,
         var x: Float = 0f,
         var y: Float = 0f,
         var intent: MovementIntent = MovementIntent.HOLD,
@@ -166,8 +177,9 @@ class BattleSimulator(
         val phase = (character.id.hashCode() and Int.MAX_VALUE) % PHASE_BUCKETS / PHASE_DIVISOR
         MemberState(character, attackTimer = character.attackInterval * (OPENING_TIMER_RATIO + phase * ATTACK_PHASE_RATIO),
             skillTimer = character.skillCooldown * (OPENING_TIMER_RATIO + phase * SKILL_PHASE_RATIO),
-            x = if (character.attackStyle == AttackStyle.MELEE) MELEE_START_X else RANGED_START_X,
-            y = MEMBER_START_Y - index * MEMBER_SPACING_Y,
+            x = (if (character.attackStyle == AttackStyle.MELEE) MELEE_START_X else RANGED_START_X) -
+                (index / 3) * 120f,
+            y = MEMBER_START_Y - (index % 3) * MEMBER_SPACING_Y,
         )
     }
     private val enemies = List(formation.monsterCount) { EnemyState(it, dungeon) }
@@ -203,7 +215,15 @@ class BattleSimulator(
         members = members.map {
             MemberSnapshot(it.character, it.hp, it.shield, it.damageDealt, it.healingDone, it.x, it.y,
                 if (it.hp <= 0f) MovementIntent.DOWN else if (finished) MovementIntent.HOLD else it.intent,
-                attackTarget(it)?.id, it.facingX, it.facingY)
+                attackTarget(it)?.id, it.facingX, it.facingY,
+                fatigue = BattleFatigue.penalty(it.fatigueTime),
+                fatigueHpLoss = it.fatigueHpLoss,
+                fatigueHpLossPerSecond = BattleFatigue.hpLossPerSecond(it.character),
+                skillDamageMultiplier = BattleFatigue.skillMultiplier(it.character.role, it.fatigueTime),
+                healingMultiplier = BattleFatigue.healMultiplier(it.character.role, it.fatigueTime),
+                skillCastDuration = if (it.skillCastRemaining > 0f) it.skillCastDuration
+                    else BattleFatigue.castDuration(it.character.role, it.fatigueTime),
+                skillCastRemaining = it.skillCastRemaining)
         },
         finished = finished,
         victory = victory,
@@ -244,6 +264,16 @@ class BattleSimulator(
 
     private fun simulateStep(delta: Float) {
         elapsedTime += delta
+        members.filter { it.hp > 0f }.forEach { member ->
+            member.fatigueTime += delta
+            val loss = min(member.hp, BattleFatigue.hpLossPerSecond(member.character) * delta)
+            member.hp = max(0f, member.hp - loss)
+            member.fatigueHpLoss += loss
+            if (member.hp <= 0f) {
+                member.skillCastRemaining = 0f
+                log("${member.character.name} collapsed from fatigue")
+            }
+        }
         enemies.forEach { it.sunderTime = max(0f, it.sunderTime - delta) }
         updateFacing()
         moveCombatants(delta)
@@ -273,6 +303,15 @@ class BattleSimulator(
 
     private fun updateMembers(delta: Float) {
         members.filter { it.hp > 0f }.forEach { member ->
+            if (member.skillCastRemaining > 0f) {
+                member.skillCastRemaining = max(0f, member.skillCastRemaining - delta)
+                if (member.skillCastRemaining <= TIMER_EPSILON) {
+                    member.skillCastRemaining = 0f
+                    useSkill(member)
+                    member.skillTimer = member.character.skillCooldown
+                }
+                return@forEach
+            }
             member.attackTimer = max(0f, member.attackTimer - delta)
             member.skillTimer = max(0f, member.skillTimer - delta)
             val target = attackTarget(member)
@@ -283,8 +322,14 @@ class BattleSimulator(
             }
             val supportSkill = member.character.skillType in listOf(SkillType.GUARD, SkillType.HEAL)
             if (member.skillTimer <= 0f && (supportSkill || inRange)) {
-                useSkill(member)
-                member.skillTimer += member.character.skillCooldown
+                val castDuration = BattleFatigue.castDuration(member.character.role, member.fatigueTime)
+                if (castDuration > 0f) {
+                    member.skillCastDuration = castDuration
+                    member.skillCastRemaining = castDuration
+                } else {
+                    useSkill(member)
+                    member.skillTimer += member.character.skillCooldown
+                }
             }
         }
     }
@@ -331,7 +376,8 @@ class BattleSimulator(
 
             SkillType.HEAL -> {
                 val target = members.filter { it.hp > 0f }.minByOrNull { it.hp / it.character.maxHp } ?: return
-                val healed = min(HEAL_AMOUNT, target.character.maxHp - target.hp)
+                val healed = min(HEAL_AMOUNT * BattleFatigue.healMultiplier(member.character.role, member.fatigueTime),
+                    target.character.maxHp - target.hp)
                 target.hp += healed
                 member.healingDone += healed
                 if (healed > 0f) {
@@ -345,13 +391,13 @@ class BattleSimulator(
 
             SkillType.STRIKE -> {
                 damageEnemy(member, STRIKE_DAMAGE, SkillType.STRIKE)
-                log("${member.character.name} used ${member.character.skillName} for ${STRIKE_DAMAGE.toInt()}")
+                log("${member.character.name} used ${member.character.skillName}")
             }
 
             SkillType.CLEAVE -> {
                 val damage = if (dungeon.mechanic == DungeonMechanic.SWARM) CLEAVE_SWARM_DAMAGE else CLEAVE_DAMAGE
                 enemies.filter { it.hp > 0f }.forEach { damageEnemy(member, damage, SkillType.CLEAVE, it) }
-                log("${member.character.name} used ${member.character.skillName} for ${damage.toInt()}")
+                log("${member.character.name} used ${member.character.skillName}")
             }
 
             SkillType.INTERRUPT -> {
@@ -410,8 +456,7 @@ class BattleSimulator(
         val length = distance(member.x, member.y, desiredX, desiredY)
         if (length < FLANK_STOP_DISTANCE) return
         val step = min(1f, member.character.moveSpeed * delta / length)
-        member.x += (desiredX - member.x) * step
-        member.y += (desiredY - member.y) * step
+        moveWithoutPushing(Body(member = member), (desiredX - member.x) * step, (desiredY - member.y) * step)
         member.intent = MovementIntent.APPROACH
     }
 
@@ -420,7 +465,7 @@ class BattleSimulator(
         members.forEach { member ->
             val wasRetreating = member.intent == MovementIntent.RETREAT
             member.intent = MovementIntent.HOLD
-            if (member.hp <= 0f) return@forEach
+            if (member.hp <= 0f || member.skillCastRemaining > 0f) return@forEach
             val enemy = attackTarget(member) ?: return@forEach
             val melee = member.character.attackStyle == AttackStyle.MELEE
             if (melee && member.character.role == Role.DPS && threatTarget(enemy) !== member) {
@@ -437,8 +482,8 @@ class BattleSimulator(
                 val desired = if (retreat) RETREAT_END_RANGE else member.character.attackStyle.range - APPROACH_STOP_MARGIN
                 val amount = min(member.character.moveSpeed * delta, kotlin.math.abs(length - desired))
                 val sign = if (retreat) -1f else 1f
-                member.x = (member.x + (target.x - member.x) / length * amount * sign).coerceIn(MIN_X, MAX_X)
-                member.y = (member.y + (target.y - member.y) / length * amount * sign).coerceIn(MIN_Y, MAX_Y)
+                moveWithoutPushing(Body(member = member),
+                    (target.x - member.x) / length * amount * sign, (target.y - member.y) / length * amount * sign)
                 member.intent = if (retreat) MovementIntent.RETREAT else MovementIntent.APPROACH
             }
         }
@@ -447,8 +492,7 @@ class BattleSimulator(
             val length = distance(enemy.x, enemy.y, target.x, target.y)
             if (length > ENEMY_STOP_RANGE) {
                 val step = min(dungeon.enemyMoveSpeed * delta, length - ENEMY_STOP_RANGE) / length
-                enemy.x = (enemy.x + (target.x - enemy.x) * step).coerceIn(ENEMY_MIN_X, MAX_X)
-                enemy.y = (enemy.y + (target.y - enemy.y) * step).coerceIn(MIN_Y, MAX_Y)
+                moveWithoutPushing(Body(enemy = enemy), (target.x - enemy.x) * step, (target.y - enemy.y) * step)
             }
         }
         separateCombatants()
@@ -462,6 +506,22 @@ class BattleSimulator(
             get() = member?.y ?: enemy!!.y
             set(value) { if (member != null) member.y = value else enemy!!.y = value }
         val radius: Float get() = if (member != null) MEMBER_RADIUS else ENEMY_RADIUS
+    }
+
+    /** 이동 전에 접촉을 제한해 정지한 상대를 반복해서 밀어내는 진동을 방지한다. */
+    private fun moveWithoutPushing(body: Body, desiredDx: Float, desiredDy: Float) {
+        val minX = if (body.enemy != null) ENEMY_MIN_X else MIN_X
+        val dx = (body.x + desiredDx).coerceIn(minX, MAX_X) - body.x
+        val dy = (body.y + desiredDy).coerceIn(MIN_Y, MAX_Y) - body.y
+        var fraction = 1f
+        fun limit(other: Body) {
+            fraction = min(fraction, CombatMovement.allowedFraction(body.x, body.y, dx, dy,
+                other.x, other.y, body.radius + other.radius + SEPARATION_PADDING))
+        }
+        members.filter { it.hp > 0f && it !== body.member }.forEach { limit(Body(member = it)) }
+        enemies.filter { it.hp > 0f && it !== body.enemy }.forEach { limit(Body(enemy = it)) }
+        body.x += dx * fraction
+        body.y += dy * fraction
     }
 
     /** 충돌 원이 겹치는 쌍을 중심 연결 방향으로 반씩 밀어내고 경계 안에서 반복 보정한다. */
@@ -572,7 +632,10 @@ class BattleSimulator(
     ) {
         if (target == null || target.hp <= 0f || !inRange(source, target)) return
         val rear = BattleFacing.isRear(source.x - target.x, source.y - target.y, target.facingX, target.facingY)
-        val applied = min(BattleFacing.damage(amount, rear), target.hp)
+        val fatigueMultiplier = if (skillType != null) {
+            BattleFatigue.skillMultiplier(source.character.role, source.fatigueTime)
+        } else 1f
+        val applied = min(BattleFacing.damage(amount * fatigueMultiplier, rear), target.hp)
         target.hp -= applied
         source.damageDealt += applied
         val multiplier = if (source === protector() || source.character.role == Role.TANK) PROTECTOR_THREAT_MULTIPLIER else 1f
@@ -597,13 +660,17 @@ class BattleSimulator(
         target.hp = max(0f, target.hp - hpDamage)
         target.damageTaken += hpDamage
         cues += CombatCue(CueType.HIT, enemyId, target.character.id, hpDamage, rearAttack = rear)
-        if (target.hp <= 0f) log("${target.character.name} was defeated")
+        if (target.hp <= 0f) {
+            target.skillCastRemaining = 0f
+            log("${target.character.name} was defeated")
+        }
     }
 
     private fun finish(didWin: Boolean, message: String) {
         victory = didWin
         finished = true
         enemies.forEach { it.castRemaining = 0f }
+        members.forEach { it.skillCastRemaining = 0f }
         log(message)
     }
 

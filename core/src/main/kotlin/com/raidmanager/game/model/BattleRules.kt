@@ -147,7 +147,8 @@ object BattleRules {
     /** 몬스터 기본 이동 속도. */
     const val DEFAULT_ENEMY_SPEED = 95f
     /** 공격대 편성 인원. */
-    const val PARTY_SIZE = 3
+    const val MIN_PARTY_SIZE = 3
+    const val MAX_PARTY_SIZE = 6
     /** 최소 몬스터 수. */
     const val MIN_MONSTER_COUNT = 1
     /** 최대 몬스터 수. */

@@ -4,6 +4,12 @@
 
 ## 문서 목록
 
+- [전체 캐릭터 에셋 라이브러리](../core/src/main/resources/models/CHARACTERS.md): 무료 팩 목록과 지연 로딩 API
+
+- [외부 3D 캐릭터 6종](../core/src/main/resources/models/rpg-characters/README.md): 캐릭터별 모델·동작 연결
+
+- [외부 몬스터 에셋 50종](../core/src/main/resources/models/ultimate-monsters/README.md): 원본 모델 목록·경로·라이선스
+
 - [캐릭터 스프라이트](sprite-art.md): 생성 아트 원본, 프레임 배치, 동작 연결과 제작 프롬프트
 - [던전 전투 배경](background-art.md): 몬스터별 배경, 리소스 연결과 제작 프롬프트
 

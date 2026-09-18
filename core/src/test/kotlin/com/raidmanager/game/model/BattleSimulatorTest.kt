@@ -120,7 +120,10 @@ class BattleSimulatorTest {
 
     @Test
     fun `highest max hp hero protects allies regardless of class`() {
-        val raid = formation("luna", "rook", "mira")
+        // 시전 타이밍과 분리해 평타·도발의 보호 대상 선정 규칙을 검증한다.
+        val raid = formation("luna", "rook", "mira").let { formation ->
+            formation.copy(members = formation.members.map { it.copy(skillCooldown = 1000f) })
+        }
         val simulator = BattleSimulator(raid.copy(monsterCount = 3),
             PrototypeContent.dungeons.first().copy(enemyMaxHp = 10000f, enemyAttack = 0f, mechanicInterval = 100f))
         assertEquals("mira", simulator.snapshot().protectorId)

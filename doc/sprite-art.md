@@ -1,5 +1,23 @@
 # 캐릭터 스프라이트
 
+## 현재 전투 캐릭터
+
+- 영웅 6종은 Quaternius RPG Character Pack의 외부 glTF 모델과 원본 골격 애니메이션을 사용한다.
+- 모델별 연결은 `graphics/CharacterModels.kt`, 공통 렌더링은 `graphics/ExternalModelRenderer.kt`에 둔다.
+- 모델·라이선스·동작 목록은 [RPG 캐릭터 에셋](../core/src/main/resources/models/rpg-characters/README.md)을 참고한다.
+- 기존 스프라이트와 코드 생성 탱커는 비교용 리소스로 보존한다.
+
+## 이전 탱커 3D 프로토타입 (비교용)
+
+- 이전 전투 화면의 `Role.TANK`(AEGIS)는 `graphics/TankModel.kt`에서 생성하는 관절형 3D 메시로 표시한다.
+- 강철 갑옷, 금색 테두리, 검, 방패, 푸른 망토를 가진 스타일화된 모델이며 외부 모델 파일이나 추가 라이브러리는 없다.
+- 원본 `aegis.png`의 16개 자세를 3D 관절 포즈로 재현한다. 이미지 기반 원본이므로 관절 궤적이 완전히 동일한 것은 아니다.
+- `SpriteTimeline`의 프레임 선택·우선순위·타이밍, 전장의 이동·전진·반동·호흡·사망 회전·투명도는 공유한다.
+- `TankModelRenderer`가 깊이 버퍼와 조명으로 투명 타깃에 렌더링하고, `BattleStage`가 기존 발 기준과 정렬 순서로 합성한다.
+- 모델·렌더러·프레임버퍼는 `GameAssets`가 필요할 때 생성하고 종료 시 해제한다. 다른 영웅과 몬스터는 기존 스프라이트를 사용한다.
+- `RAID_PREVIEW_TANK=true ./gradlew :lwjgl3:spritePreview`로 원본/3D의 16개 자세를 비교한다.
+  결과는 `/tmp/raid-tank-poses-right.png`, `/tmp/raid-tank-poses-left.png`이며 OpenGL 오류도 검사한다.
+
 ## 리소스와 제작 방식
 
 - 생성 방식: 내장 ImageGen, 반실사 판타지 캐릭터 아틀라스.

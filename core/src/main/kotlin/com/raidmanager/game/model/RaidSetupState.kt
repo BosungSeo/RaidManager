@@ -9,12 +9,12 @@ class RaidSetupState(
     val selectedIds: Set<String> get() = selection.toSet()
     var monsterCount: Int = initialFormation?.monsterCount ?: BattleRules.MIN_MONSTER_COUNT
         private set
-    val isComplete: Boolean get() = selection.size == BattleRules.PARTY_SIZE
+    val isComplete: Boolean get() = selection.size in BattleRules.MIN_PARTY_SIZE..BattleRules.MAX_PARTY_SIZE
 
     fun toggle(index: Int): Boolean {
         val character = roster.getOrNull(index) ?: return false
         if (selection.remove(character.id)) return true
-        if (isComplete) return false
+        if (selection.size >= BattleRules.MAX_PARTY_SIZE) return false
         selection += character.id
         return true
     }
@@ -26,6 +26,6 @@ class RaidSetupState(
     fun createFormation(): RaidFormation? {
         if (!isComplete) return null
         val members = roster.filter { it.id in selection }
-        return if (members.size == BattleRules.PARTY_SIZE) RaidFormation(members, monsterCount) else null
+        return if (members.size in BattleRules.MIN_PARTY_SIZE..BattleRules.MAX_PARTY_SIZE) RaidFormation(members, monsterCount) else null
     }
 }

@@ -29,7 +29,7 @@ class RaidSetupScene(
     private val state = RaidSetupState(roster, initialFormation)
     private val view = RaidSetupView(assets, roster)
     private val pendingCommands = ArrayDeque<SetupCommand>()
-    private var message = "Select exactly ${RaidFormation.PARTY_SIZE} members"
+    private var message = "Select 3-6 members"
     private var statusIndex: Int? = null
 
     override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
@@ -88,7 +88,7 @@ class RaidSetupScene(
 
     private fun toggle(index: Int) {
         message = if (state.toggle(index)) {
-            "${state.selectedIds.size} / ${RaidFormation.PARTY_SIZE} selected"
+            "${state.selectedIds.size} / ${RaidFormation.MAX_PARTY_SIZE} selected"
         } else {
             "Raid is full. Deselect one member first."
         }
@@ -97,7 +97,7 @@ class RaidSetupScene(
     private fun continueToDungeon() {
         val formation = state.createFormation()
         if (formation == null) {
-            message = "Select exactly ${RaidFormation.PARTY_SIZE} members"
+            message = "Select 3-6 members"
             return
         }
         onContinue(formation)
@@ -105,6 +105,6 @@ class RaidSetupScene(
 
     private fun adjustMonsterCount(delta: Int) {
         state.adjustMonsterCount(delta)
-        message = "${state.selectedIds.size} / ${RaidFormation.PARTY_SIZE} selected · ${state.monsterCount} monster(s)"
+        message = "${state.selectedIds.size} / ${RaidFormation.MAX_PARTY_SIZE} selected · ${state.monsterCount} monster(s)"
     }
 }
